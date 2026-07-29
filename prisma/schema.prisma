@@ -14,35 +14,35 @@ datasource db {
 }
 
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
 
 model InstagramAccount {
-  id              String    @id @default(cuid())
-  shop            String    @unique
-  igUserId        String
-  username        String
-  accountType     String?
-  accessToken     String
-  tokenExpiresAt  DateTime
-  connectedAt     DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String   @id @default(cuid())
+  shop           String   @unique
+  igUserId       String
+  username       String
+  accountType    String?
+  accessToken    String   @db.Text
+  tokenExpiresAt DateTime
+  connectedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model InstagramPost {
@@ -50,10 +50,10 @@ model InstagramPost {
   shop         String
   igMediaId    String
   mediaType    String
-  mediaUrl     String
-  thumbnailUrl String?
-  permalink    String
-  caption      String?
+  mediaUrl     String   @db.Text
+  thumbnailUrl String?  @db.Text
+  permalink    String   @db.Text
+  caption      String?  @db.Text
   timestamp    DateTime
   hidden       Boolean  @default(false)
   createdAt    DateTime @default(now())
@@ -66,31 +66,31 @@ model CustomMedia {
   id        String   @id @default(cuid())
   shop      String
   mediaType String
-  url       String
-  caption   String?
+  url       String   @db.Text
+  caption   String?  @db.Text
   position  Int      @default(0)
   createdAt DateTime @default(now())
 }
 
 model Feed {
-  id             String   @id @default(cuid())
-  shop           String   @unique
-  postsToShow    String   @default("own_posts")
-  layout         String   @default("grid")
+  id             String  @id @default(cuid())
+  shop           String  @unique
+  postsToShow    String  @default("own_posts")
+  layout         String  @default("grid")
   title          String?
-  onPostClick    String   @default("popup")
-  postSpacing    String   @default("small")
-  aspectRatio    String   @default("3:4")
-  roundedCorners Boolean  @default(false)
-  rowsDesktop    Int      @default(2)
-  colsDesktop    Int      @default(4)
-  rowsMobile     Int      @default(2)
-  colsMobile     Int      @default(2)
+  onPostClick    String  @default("popup")
+  postSpacing    String  @default("small")
+  aspectRatio    String  @default("3:4")
+  roundedCorners Boolean @default(false)
+  rowsDesktop    Int     @default(2)
+  colsDesktop    Int     @default(4)
+  rowsMobile     Int     @default(2)
+  colsMobile     Int     @default(2)
 
   showLoadingAnimation Boolean @default(false)
   linkToOriginalPost   Boolean @default(false)
   showSliderPreviews   Boolean @default(false)
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
