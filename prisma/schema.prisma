@@ -1,0 +1,96 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
+// enough when changing adapters.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
+}
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model InstagramAccount {
+  id              String    @id @default(cuid())
+  shop            String    @unique
+  igUserId        String
+  username        String
+  accountType     String?
+  accessToken     String
+  tokenExpiresAt  DateTime
+  connectedAt     DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model InstagramPost {
+  id           String   @id @default(cuid())
+  shop         String
+  igMediaId    String
+  mediaType    String
+  mediaUrl     String
+  thumbnailUrl String?
+  permalink    String
+  caption      String?
+  timestamp    DateTime
+  hidden       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([shop, igMediaId])
+}
+
+model CustomMedia {
+  id        String   @id @default(cuid())
+  shop      String
+  mediaType String
+  url       String
+  caption   String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model Feed {
+  id             String   @id @default(cuid())
+  shop           String   @unique
+  postsToShow    String   @default("own_posts")
+  layout         String   @default("grid")
+  title          String?
+  onPostClick    String   @default("popup")
+  postSpacing    String   @default("small")
+  aspectRatio    String   @default("3:4")
+  roundedCorners Boolean  @default(false)
+  rowsDesktop    Int      @default(2)
+  colsDesktop    Int      @default(4)
+  rowsMobile     Int      @default(2)
+  colsMobile     Int      @default(2)
+
+  showLoadingAnimation Boolean @default(false)
+  linkToOriginalPost   Boolean @default(false)
+  showSliderPreviews   Boolean @default(false)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}

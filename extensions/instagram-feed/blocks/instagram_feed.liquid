@@ -1,0 +1,248 @@
+<div id="instafeed-{{ block.id }}" class="instafeed-widget">
+  <p>Loading Instagram posts…</p>
+</div>
+
+<style>
+  .instafeed-title {
+    margin: 0 0 12px 0;
+  }
+  .instafeed-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--instafeed-cols-mobile), 1fr);
+    gap: var(--instafeed-gap);
+  }
+  @media screen and (min-width: 750px) {
+    .instafeed-grid {
+      grid-template-columns: repeat(var(--instafeed-cols-desktop), 1fr);
+    }
+  }
+  .instafeed-slider {
+    display: flex;
+    overflow-x: auto;
+    gap: var(--instafeed-gap);
+    scroll-snap-type: x mandatory;
+  }
+  .instafeed-slider .instafeed-item {
+    flex: 0 0 auto;
+    width: 45%;
+    scroll-snap-align: start;
+  }
+  @media screen and (min-width: 750px) {
+    .instafeed-slider .instafeed-item {
+      width: calc(100% / var(--instafeed-cols-desktop));
+    }
+  }
+  .instafeed-floating {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 90px;
+    height: 90px;
+    z-index: 999;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    border-radius: var(--instafeed-radius);
+    overflow: hidden;
+  }
+  .instafeed-widget img,
+  .instafeed-widget video {
+    width: 100%;
+    aspect-ratio: var(--instafeed-aspect-ratio);
+    object-fit: cover;
+    border-radius: var(--instafeed-radius);
+    display: block;
+    cursor: pointer;
+  }
+  .instafeed-popup-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .instafeed-popup-content {
+    background: #fff;
+    max-width: 90vw;
+    max-height: 90vh;
+    padding: 16px;
+    border-radius: 8px;
+    overflow: auto;
+  }
+  .instafeed-popup-content img,
+  .instafeed-popup-content video {
+    max-width: 80vw;
+    max-height: 70vh;
+    width: auto;
+    display: block;
+    margin: 0 auto 12px auto;
+  }
+  .instafeed-popup-close {
+    position: absolute;
+    top: 16px;
+    right: 24px;
+    font-size: 28px;
+    color: #fff;
+    cursor: pointer;
+    background: none;
+    border: none;
+  }
+</style>
+
+<script>
+  (function () {
+    var root = document.getElementById('instafeed-{{ block.id }}');
+    var spacingMap = { none: 0, small: 8, medium: 16, large: 24 };
+
+    function aspectRatioCss(value) {
+      return (value || '3:4').replace(':', ' / ');
+    }
+
+    function renderPopup(post) {
+      var overlay = document.createElement('div');
+      overlay.className = 'instafeed-popup-overlay';
+
+      var content = document.createElement('div');
+      content.className = 'instafeed-popup-content';
+
+      var media;
+      if (post.mediaType === 'VIDEO') {
+        media = document.createElement('video');
+        media.src = post.mediaUrl;
+        media.controls = true;
+        media.autoplay = true;
+      } else {
+        media = document.createElement('img');
+        media.src = post.mediaUrl;
+      }
+      content.appendChild(media);
+
+      if (post.caption) {
+        var caption = document.createElement('p');
+        caption.textContent = post.caption;
+        content.appendChild(caption);
+      }
+
+      var link = document.createElement('a');
+      link.href = post.permalink;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = 'View original';
+      content.appendChild(link);
+
+      var close = document.createElement('button');
+      close.className = 'instafeed-popup-close';
+      close.textContent = '×';
+      close.setAttribute('aria-label', 'Close');
+      close.onclick = function () {
+        overlay.remove();
+      };
+      overlay.appendChild(close);
+
+      overlay.appendChild(content);
+      overlay.addEventListener('click', function (event) {
+        if (event.target === overlay) overlay.remove();
+      });
+
+      document.body.appendChild(overlay);
+    }
+
+    function buildPostElement(post, feed) {
+      var wrapper = document.createElement('div');
+      wrapper.className = 'instafeed-item';
+
+      var media;
+      if (post.mediaType === 'VIDEO') {
+        media = document.createElement('video');
+        media.src = post.mediaUrl;
+        media.muted = true;
+        media.loop = true;
+        media.playsInline = true;
+      } else {
+        media = document.createElement('img');
+        media.src = post.thumbnailUrl || post.mediaUrl;
+        media.loading = 'lazy';
+        media.alt = post.caption || '';
+      }
+
+      if (feed.onPostClick === 'redirect') {
+        var link = document.createElement('a');
+        link.href = post.permalink;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.appendChild(media);
+        wrapper.appendChild(link);
+      } else {
+        media.addEventListener('click', function () {
+          renderPopup(post);
+        });
+        wrapper.appendChild(media);
+      }
+
+      return wrapper;
+    }
+
+    fetch('/apps/instafeed/posts')
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var posts = data.posts || [];
+        var feed = data.feed || {};
+
+        root.innerHTML = '';
+        root.style.setProperty('--instafeed-gap', (spacingMap[feed.postSpacing] ?? 8) + 'px');
+        root.style.setProperty('--instafeed-aspect-ratio', aspectRatioCss(feed.aspectRatio));
+        root.style.setProperty('--instafeed-radius', feed.roundedCorners ? '8px' : '0px');
+        root.style.setProperty('--instafeed-cols-desktop', feed.colsDesktop || 4);
+        root.style.setProperty('--instafeed-cols-mobile', feed.colsMobile || 2);
+
+        if (posts.length === 0) {
+          root.innerHTML = '<p>No Instagram posts yet.</p>';
+          return;
+        }
+
+        if (feed.title) {
+          var heading = document.createElement('h3');
+          heading.className = 'instafeed-title';
+          heading.textContent = feed.title;
+          root.appendChild(heading);
+        }
+
+        if (feed.layout === 'floating') {
+          var floating = document.createElement('div');
+          floating.className = 'instafeed-floating';
+          var thumb = document.createElement('img');
+          thumb.src = posts[0].thumbnailUrl || posts[0].mediaUrl;
+          floating.appendChild(thumb);
+          floating.addEventListener('click', function () {
+            renderPopup(posts[0]);
+          });
+          root.appendChild(floating);
+          return;
+        }
+
+        var container = document.createElement('div');
+        container.className = feed.layout === 'slider' ? 'instafeed-slider' : 'instafeed-grid';
+
+        var maxPosts = feed.layout === 'grid'
+          ? (feed.rowsDesktop || 2) * (feed.colsDesktop || 4)
+          : posts.length;
+
+        posts.slice(0, maxPosts).forEach(function (post) {
+          container.appendChild(buildPostElement(post, feed));
+        });
+
+        root.appendChild(container);
+      })
+      .catch(function () {
+        root.innerHTML = '<p>Unable to load Instagram feed.</p>';
+      });
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Instagram Feed",
+  "target": "section"
+}
+{% endschema %}
