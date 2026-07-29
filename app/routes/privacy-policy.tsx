@@ -1,9 +1,8 @@
+import LegalPage from "../components/LegalPage";
+
 export default function PrivacyPolicy() {
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: "40px 20px", fontFamily: "sans-serif", lineHeight: 1.6 }}>
-      <h1>Privacy Policy</h1>
-      <p>Last updated: July 29, 2026</p>
-
+    <LegalPage title="Privacy Policy" updated="July 29, 2026">
       <p>
         InstaGallery (&quot;we&quot;, &quot;our&quot;, &quot;the app&quot;) is
         a Shopify app that displays a merchant&apos;s Instagram content as a
@@ -41,18 +40,17 @@ export default function PrivacyPolicy() {
 
       <h2>Data storage</h2>
       <p>
-        Data is stored in our application&apos;s database, accessible only to the
-        app for the purpose of operating your feed. Instagram access tokens
-        are stored securely and used only to fetch your own content.
+        Data is stored in our application&apos;s database, accessible only to
+        the app for the purpose of operating your feed. Instagram access
+        tokens are stored securely and used only to fetch your own content.
       </p>
 
       <h2>Data retention and deletion</h2>
       <p>
-        If you uninstall the app or disconnect your Instagram account, we{" "}
+        If you uninstall the app or disconnect your Instagram account, we
         delete the associated Instagram access token and stop syncing new
         content. You may request full deletion of your data at any time — see
-        our{" "}
-        <a href="/data-deletion">Data Deletion Instructions</a>.
+        our <a href="/data-deletion">Data Deletion Instructions</a>.
       </p>
 
       <h2>Contact</h2>
@@ -60,6 +58,6 @@ export default function PrivacyPolicy() {
         Questions about this policy can be sent to{" "}
         <a href="mailto:instagallery01@gmail.com">instagallery01@gmail.com</a>.
       </p>
-    </div>
+    </LegalPage>
   );
 }

@@ -1,22 +1,21 @@
+import LegalPage from "../components/LegalPage";
+
 export default function TermsOfService() {
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: "40px 20px", fontFamily: "sans-serif", lineHeight: 1.6 }}>
-      <h1>Terms of Service</h1>
-      <p>Last updated: July 29, 2026</p>
-
+    <LegalPage title="Terms of Service" updated="July 29, 2026">
       <p>
         These terms govern your use of InstaGallery (&quot;the app&quot;), a
-        Shopify
-        app that displays your Instagram content as a shoppable gallery on
-        your storefront. By installing the app, you agree to these terms.
+        Shopify app that displays your Instagram content as a shoppable
+        gallery on your storefront. By installing the app, you agree to these
+        terms.
       </p>
 
       <h2>Use of the app</h2>
       <p>
         You must have the legal right to connect the Instagram account you
         use with the app, and must comply with Instagram&apos;s and
-        Shopify&apos;s own
-        terms of service and platform policies at all times.
+        Shopify&apos;s own terms of service and platform policies at all
+        times.
       </p>
 
       <h2>Content responsibility</h2>
@@ -46,6 +45,6 @@ export default function TermsOfService() {
         Questions about these terms can be sent to{" "}
         <a href="mailto:instagallery01@gmail.com">instagallery01@gmail.com</a>.
       </p>
-    </div>
+    </LegalPage>
   );
 }
