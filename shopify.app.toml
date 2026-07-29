@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "cddd2785e3764c63a8064ed10b1926da"
-application_url = "https://example.com"
+application_url = "https://instavo.kaswebtechsolutions.com"
 embedded = true
 name = "InstaGallery"
 
@@ -45,10 +45,10 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://instavo.kaswebtechsolutions.com/api/auth" ]
 
 [app_proxy]
-url = "https://unreproducible-chemiluminescent-jacquiline.ngrok-free.dev/proxy"
+url = "https://instavo.kaswebtechsolutions.com/proxy"
 prefix = "apps"
 subpath = "instafeed"
 
