@@ -18,8 +18,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     });
   }
 
-  await completeInstagramConnection(shop, code);
-  await syncInstagramPosts(shop);
+  try {
+    await completeInstagramConnection(shop, code);
+  } catch (error) {
+    console.error("completeInstagramConnection failed:", error);
+    throw error;
+  }
+
+  try {
+    await syncInstagramPosts(shop);
+  } catch (error) {
+    console.error("syncInstagramPosts failed:", error);
+    throw error;
+  }
 
   return redirect(`/app?shop=${encodeURIComponent(shop)}&instagram=connected`);
 };

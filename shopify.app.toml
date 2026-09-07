@@ -1,13 +1,35 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "cddd2785e3764c63a8064ed10b1926da"
+name = "InstaGallery"
 application_url = "https://instavo.kaswebtechsolutions.com"
 embedded = true
-name = "InstaGallery"
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products,write_metaobjects,write_metaobject_definitions"
+scopes = "write_metaobject_definitions,write_metaobjects,write_products"
+
+[auth]
+redirect_urls = [ "https://instavo.kaswebtechsolutions.com/api/auth" ]
+
+[app_proxy]
+url = "https://instavo.kaswebtechsolutions.com/proxy"
+subpath = "instafeed"
+prefix = "apps"
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"
@@ -32,25 +54,3 @@ required = true
 [metaobjects.app.example.fields.description]
 name = "Description"
 type = "multi_line_text_field"
-
-[webhooks]
-api_version = "2026-10"
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/app/uninstalled"
-  topics = [ "app/uninstalled" ]
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
-  topics = [ "app/scopes_update" ]
-
-[auth]
-redirect_urls = [ "https://instavo.kaswebtechsolutions.com/api/auth" ]
-
-[app_proxy]
-url = "https://instavo.kaswebtechsolutions.com/proxy"
-prefix = "apps"
-subpath = "instafeed"
-
-[build]
-automatically_update_urls_on_dev = true

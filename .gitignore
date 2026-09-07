@@ -16,6 +16,10 @@ database.sqlite
 .env
 .env.*
 
+# Schema/migrations differ between local (XAMPP) and server (MySQL) — edit each side directly
+/prisma/schema.prisma
+/prisma/migrations
+
 
 
 
