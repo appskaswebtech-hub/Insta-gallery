@@ -74,7 +74,7 @@ async function exchangeForLongLivedToken(shortLivedToken: string) {
     access_token: shortLivedToken,
   });
 
-  const response = await fetch(`${INSTAGRAM_GRAPH_BASE}/v21.0/access_token?${params.toString()}`);
+  const response = await fetch(`${INSTAGRAM_GRAPH_BASE}/access_token?${params.toString()}`);
 
   if (!response.ok) {
     throw new Error(`Instagram long-lived token exchange failed: ${await response.text()}`);
@@ -108,10 +108,22 @@ async function fetchInstagramProfile(accessToken: string) {
 
 export async function completeInstagramConnection(shop: string, code: string) {
   const shortLived = await exchangeCodeForShortLivedToken(code);
-  const longLived = await exchangeForLongLivedToken(shortLived.access_token);
-  const profile = await fetchInstagramProfile(longLived.access_token);
 
-  const tokenExpiresAt = new Date(Date.now() + longLived.expires_in * 1000);
+  let accessToken = shortLived.access_token;
+  let tokenExpiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+  try {
+    const longLived = await exchangeForLongLivedToken(shortLived.access_token);
+    accessToken = longLived.access_token;
+    tokenExpiresAt = new Date(Date.now() + longLived.expires_in * 1000);
+  } catch (error) {
+    console.error(
+      "Instagram long-lived token exchange failed, falling back to short-lived token (valid ~1 hour):",
+      error,
+    );
+  }
+
+  const profile = await fetchInstagramProfile(accessToken);
 
   return prisma.instagramAccount.upsert({
     where: { shop },
@@ -120,14 +132,14 @@ export async function completeInstagramConnection(shop: string, code: string) {
       igUserId: profile.user_id,
       username: profile.username,
       accountType: profile.account_type,
-      accessToken: longLived.access_token,
+      accessToken,
       tokenExpiresAt,
     },
     update: {
       igUserId: profile.user_id,
       username: profile.username,
       accountType: profile.account_type,
-      accessToken: longLived.access_token,
+      accessToken,
       tokenExpiresAt,
     },
   });
