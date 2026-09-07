@@ -29,6 +29,11 @@ export default function PrivacyPolicy() {
           manually add to your feed through the app.
         </li>
       </ul>
+      <p>
+        We do not access, collect, or store any personal information about
+        your store&apos;s customers. This app only accesses the merchant&apos;s
+        own store and Instagram account data.
+      </p>
 
       <h2>How we use this information</h2>
       <p>
@@ -38,19 +43,31 @@ export default function PrivacyPolicy() {
         third parties for advertising purposes.
       </p>
 
-      <h2>Data storage</h2>
+      <h2>Data storage and hosting</h2>
       <p>
-        Data is stored in our application&apos;s database, accessible only to
-        the app for the purpose of operating your feed. Instagram access
+        Data is stored in our application&apos;s database, hosted on our
+        server infrastructure (provided by GoDaddy.com, LLC), accessible only
+        to the app for the purpose of operating your feed. Instagram access
         tokens are stored securely and used only to fetch your own content.
       </p>
 
       <h2>Data retention and deletion</h2>
       <p>
-        If you uninstall the app or disconnect your Instagram account, we
-        delete the associated Instagram access token and stop syncing new
-        content. You may request full deletion of your data at any time — see
-        our <a href="/data-deletion">Data Deletion Instructions</a>.
+        If you uninstall the app, we automatically delete your store&apos;s
+        data, including any connected Instagram account information and
+        synced posts, in accordance with Shopify&apos;s mandatory compliance
+        webhooks (<code>shop/redact</code>). If you disconnect your Instagram
+        account without uninstalling the app, we delete the associated
+        access token immediately and stop syncing new content. You may also
+        request full deletion of your data at any time — see our{" "}
+        <a href="/data-deletion">Data Deletion Instructions</a>.
+      </p>
+
+      <h2>Your rights</h2>
+      <p>
+        You may request access to, or deletion of, any data we hold about
+        your store or connected Instagram account at any time by contacting
+        us using the details below.
       </p>
 
       <h2>Contact</h2>
