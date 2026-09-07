@@ -74,7 +74,7 @@ async function exchangeForLongLivedToken(shortLivedToken: string) {
     access_token: shortLivedToken,
   });
 
-  const response = await fetch(`${INSTAGRAM_GRAPH_BASE}/access_token?${params.toString()}`);
+  const response = await fetch(`${INSTAGRAM_GRAPH_BASE}/v21.0/access_token?${params.toString()}`);
 
   if (!response.ok) {
     throw new Error(`Instagram long-lived token exchange failed: ${await response.text()}`);
@@ -93,7 +93,7 @@ async function fetchInstagramProfile(accessToken: string) {
     access_token: accessToken,
   });
 
-  const response = await fetch(`${INSTAGRAM_GRAPH_BASE}/me?${params.toString()}`);
+  const response = await fetch(`${INSTAGRAM_GRAPH_BASE}/v21.0/me?${params.toString()}`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch Instagram profile: ${await response.text()}`);
@@ -160,7 +160,7 @@ async function fetchAllInstagramMedia(accessToken: string) {
     limit: "50",
   });
 
-  let url: string | null = `${INSTAGRAM_GRAPH_BASE}/me/media?${params.toString()}`;
+  let url: string | null = `${INSTAGRAM_GRAPH_BASE}/v21.0/me/media?${params.toString()}`;
 
   while (url) {
     const response: Response = await fetch(url);
