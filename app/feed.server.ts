@@ -11,7 +11,10 @@ export interface FeedInput {
   onPostClick: string;
   postSpacing: string;
   aspectRatio: string;
-  roundedCorners: boolean;
+  postFit: string;
+  postShape: string;
+  cornerRadius: number;
+  postSize: string;
   rowsDesktop: number;
   colsDesktop: number;
   rowsMobile: number;

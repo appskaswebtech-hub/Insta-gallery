@@ -18,10 +18,12 @@ export default function App() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
+        <s-link href="/app/custom-media">Custom media</s-link>
         <s-link href="/app">Main feed</s-link>
         <s-link href="/app/settings">Settings</s-link>
-        <s-link href="/app/custom-media">Custom media</s-link>
+        {/* ANALYTICS DISABLED FOR NOW - uncomment to re-enable
         <s-link href="/app/analytics">Analytics</s-link>
+        */}
       </s-app-nav>
       <Outlet />
     </AppProvider>

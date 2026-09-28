@@ -191,6 +191,30 @@ async function fetchAllInstagramMedia(accessToken: string) {
   return media;
 }
 
+interface CarouselChild {
+  media_type: string;
+  media_url: string;
+  thumbnail_url?: string;
+}
+
+async function fetchCarouselChildren(mediaId: string, accessToken: string) {
+  const params = new URLSearchParams({
+    fields: "media_type,media_url,thumbnail_url",
+    access_token: accessToken,
+  });
+
+  const response = await fetch(
+    `${INSTAGRAM_GRAPH_BASE}/v21.0/${mediaId}/children?${params.toString()}`,
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch carousel children: ${await response.text()}`);
+  }
+
+  const json: { data: CarouselChild[] } = await response.json();
+  return json.data;
+}
+
 export async function syncInstagramPosts(shop: string) {
   const account = await getInstagramAccount(shop);
   if (!account) {
@@ -200,30 +224,36 @@ export async function syncInstagramPosts(shop: string) {
   const media = await fetchAllInstagramMedia(account.accessToken);
 
   await Promise.all(
-    media.map((node) =>
-      prisma.instagramPost.upsert({
+    media.map(async (node) => {
+      const carouselChildren =
+        node.media_type === "CAROUSEL_ALBUM"
+          ? await fetchCarouselChildren(node.id, account.accessToken)
+          : null;
+
+      const data = {
+        mediaType: node.media_type,
+        mediaUrl: node.media_url,
+        thumbnailUrl: node.thumbnail_url,
+        permalink: node.permalink,
+        caption: node.caption,
+        carouselChildren: carouselChildren
+          ? JSON.stringify(carouselChildren)
+          : null,
+        timestamp: new Date(node.timestamp),
+      };
+
+      return prisma.instagramPost.upsert({
         where: { shop_igMediaId: { shop, igMediaId: node.id } },
-        create: {
-          shop,
-          igMediaId: node.id,
-          mediaType: node.media_type,
-          mediaUrl: node.media_url,
-          thumbnailUrl: node.thumbnail_url,
-          permalink: node.permalink,
-          caption: node.caption,
-          timestamp: new Date(node.timestamp),
-        },
-        update: {
-          mediaType: node.media_type,
-          mediaUrl: node.media_url,
-          thumbnailUrl: node.thumbnail_url,
-          permalink: node.permalink,
-          caption: node.caption,
-          timestamp: new Date(node.timestamp),
-        },
-      }),
-    ),
+        create: { shop, igMediaId: node.id, ...data },
+        update: data,
+      });
+    }),
   );
+
+  const currentMediaIds = media.map((node) => node.id);
+  await prisma.instagramPost.deleteMany({
+    where: { shop, igMediaId: { notIn: currentMediaIds } },
+  });
 
   return media.length;
 }

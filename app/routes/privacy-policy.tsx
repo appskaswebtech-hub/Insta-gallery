@@ -59,7 +59,7 @@ export default function PrivacyPolicy() {
         webhooks (<code>shop/redact</code>). If you disconnect your Instagram
         account without uninstalling the app, we delete the associated
         access token immediately and stop syncing new content. You may also
-        request full deletion of your data at any time — see our{" "}
+        request full deletion of your data at any time - see our{" "}
         <a href="/data-deletion">Data Deletion Instructions</a>.
       </p>
 

@@ -3,13 +3,34 @@
 </div>
 
 <style>
+  .instafeed-widget {
+    position: relative;
+    padding: 28px;
+    border-radius: 18px;
+    border: 1.5px solid transparent;
+    background:
+      linear-gradient(#fff, #fff) padding-box,
+      linear-gradient(135deg, #b88a44, #f3e2b3 35%, #d4af37 60%, #8a6a2f) border-box;
+    box-shadow:
+      0 8px 30px rgba(0, 0, 0, 0.08),
+      0 0 0 1px rgba(212, 175, 55, 0.08);
+  }
   .instafeed-title {
     margin: 0 0 12px 0;
+    font-family: Georgia, "Times New Roman", serif;
+    letter-spacing: 0.03em;
   }
   .instafeed-grid {
     display: grid;
     grid-template-columns: repeat(var(--instafeed-cols-mobile), 1fr);
     gap: var(--instafeed-gap);
+    justify-content: center;
+    align-items: start;
+  }
+  .instafeed-grid .instafeed-item {
+    max-width: var(--instafeed-size);
+    margin: 0 auto;
+    width: 100%;
   }
   @media screen and (min-width: 750px) {
     .instafeed-grid {
@@ -25,12 +46,40 @@
   .instafeed-slider .instafeed-item {
     flex: 0 0 auto;
     width: 45%;
+    max-width: var(--instafeed-size);
     scroll-snap-align: start;
   }
   @media screen and (min-width: 750px) {
     .instafeed-slider .instafeed-item {
       width: calc(100% / var(--instafeed-cols-desktop));
     }
+  }
+  .instafeed-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--instafeed-gap);
+  }
+  .instafeed-list .instafeed-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .instafeed-list .instafeed-item img,
+  .instafeed-list .instafeed-item video {
+    width: var(--instafeed-size, 120px);
+    flex: 0 0 auto;
+  }
+  .instafeed-widget.instafeed-shape-circle img,
+  .instafeed-widget.instafeed-shape-circle video {
+    width: var(--instafeed-size);
+    height: var(--instafeed-size);
+    aspect-ratio: 1 / 1;
+    max-width: var(--instafeed-size);
+  }
+  .instafeed-list-caption {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.4;
   }
   .instafeed-floating {
     position: fixed;
@@ -44,11 +93,47 @@
     border-radius: var(--instafeed-radius);
     overflow: hidden;
   }
+  .instafeed-item {
+    position: relative;
+    overflow: hidden;
+  }
+  .instafeed-item img,
+  .instafeed-item video,
+  .instafeed-floating img {
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .instafeed-item:hover img,
+  .instafeed-item:hover video,
+  .instafeed-floating:hover img {
+    transform: scale(1.07);
+  }
+  .instafeed-play-btn {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+    top: 50%;
+    left: 50%;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .instafeed-play-btn:hover {
+    background: rgba(0, 0, 0, 0.65);
+    transform: translate(-50%, -50%) scale(1.08);
+  }
   .instafeed-widget img,
   .instafeed-widget video {
     width: 100%;
     aspect-ratio: var(--instafeed-aspect-ratio);
-    object-fit: cover;
+    object-fit: var(--instafeed-fit, cover);
     border-radius: var(--instafeed-radius);
     display: block;
     cursor: pointer;
@@ -78,6 +163,49 @@
     display: block;
     margin: 0 auto 12px auto;
   }
+  .instafeed-popup-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 8px;
+  }
+  .instafeed-popup-nav-btn {
+    background: none;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .instafeed-popup-post-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: #fff;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 1001;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+  .instafeed-popup-post-nav:hover {
+    background: rgba(0, 0, 0, 0.7);
+    transform: translateY(-50%) scale(1.08);
+  }
+  .instafeed-popup-post-nav-prev {
+    left: 24px;
+  }
+  .instafeed-popup-post-nav-next {
+    right: 24px;
+  }
   .instafeed-popup-close {
     position: absolute;
     top: 16px;
@@ -94,29 +222,109 @@
   (function () {
     var root = document.getElementById('instafeed-{{ block.id }}');
     var spacingMap = { none: 0, small: 8, medium: 16, large: 24 };
+    var sizeMap = { small: 80, medium: 140, large: 220, xlarge: 300 };
+    var allPosts = [];
 
     function aspectRatioCss(value) {
       return (value || '3:4').replace(':', ' / ');
     }
 
-    function renderPopup(post) {
+    function createMediaEl(mediaType, url) {
+      var el;
+      if (mediaType === 'VIDEO') {
+        el = document.createElement('video');
+        el.src = url;
+        el.controls = true;
+        el.autoplay = true;
+      } else {
+        el = document.createElement('img');
+        el.src = url;
+      }
+      return el;
+    }
+
+    function renderPopup(post, postIndex) {
       var overlay = document.createElement('div');
       overlay.className = 'instafeed-popup-overlay';
+
+      function goToPost(newIndex) {
+        if (newIndex < 0 || newIndex >= allPosts.length) return;
+        overlay.remove();
+        renderPopup(allPosts[newIndex], newIndex);
+      }
+
+      if (typeof postIndex === 'number' && allPosts.length > 1) {
+        var prevPostBtn = document.createElement('button');
+        prevPostBtn.className = 'instafeed-popup-post-nav instafeed-popup-post-nav-prev';
+        prevPostBtn.setAttribute('aria-label', 'Previous post');
+        prevPostBtn.textContent = '‹';
+        prevPostBtn.onclick = function () {
+          goToPost((postIndex - 1 + allPosts.length) % allPosts.length);
+        };
+        overlay.appendChild(prevPostBtn);
+
+        var nextPostBtn = document.createElement('button');
+        nextPostBtn.className = 'instafeed-popup-post-nav instafeed-popup-post-nav-next';
+        nextPostBtn.setAttribute('aria-label', 'Next post');
+        nextPostBtn.textContent = '›';
+        nextPostBtn.onclick = function () {
+          goToPost((postIndex + 1) % allPosts.length);
+        };
+        overlay.appendChild(nextPostBtn);
+      }
 
       var content = document.createElement('div');
       content.className = 'instafeed-popup-content';
 
-      var media;
-      if (post.mediaType === 'VIDEO') {
-        media = document.createElement('video');
-        media.src = post.mediaUrl;
-        media.controls = true;
-        media.autoplay = true;
-      } else {
-        media = document.createElement('img');
-        media.src = post.mediaUrl;
+      var slides = post.carouselChildren && post.carouselChildren.length
+        ? post.carouselChildren
+        : [{ media_type: post.mediaType, media_url: post.mediaUrl }];
+      var slideIndex = 0;
+
+      var mediaWrapper = document.createElement('div');
+      mediaWrapper.className = 'instafeed-popup-media-wrapper';
+
+      function showSlide(index) {
+        mediaWrapper.innerHTML = '';
+        var slide = slides[index];
+        mediaWrapper.appendChild(createMediaEl(slide.media_type, slide.media_url));
       }
-      content.appendChild(media);
+      showSlide(slideIndex);
+      content.appendChild(mediaWrapper);
+
+      if (slides.length > 1) {
+        var nav = document.createElement('div');
+        nav.className = 'instafeed-popup-nav';
+
+        var prev = document.createElement('button');
+        prev.textContent = '‹';
+        prev.className = 'instafeed-popup-nav-btn';
+        prev.onclick = function () {
+          slideIndex = (slideIndex - 1 + slides.length) % slides.length;
+          showSlide(slideIndex);
+        };
+
+        var next = document.createElement('button');
+        next.textContent = '›';
+        next.className = 'instafeed-popup-nav-btn';
+        next.onclick = function () {
+          slideIndex = (slideIndex + 1) % slides.length;
+          showSlide(slideIndex);
+        };
+
+        var counter = document.createElement('span');
+        counter.textContent = '1 / ' + slides.length;
+        var origShowSlide = showSlide;
+        showSlide = function (index) {
+          origShowSlide(index);
+          counter.textContent = (index + 1) + ' / ' + slides.length;
+        };
+
+        nav.appendChild(prev);
+        nav.appendChild(counter);
+        nav.appendChild(next);
+        content.appendChild(nav);
+      }
 
       if (post.caption) {
         var caption = document.createElement('p');
@@ -148,17 +356,19 @@
       document.body.appendChild(overlay);
     }
 
-    function buildPostElement(post, feed) {
+    function buildPostElement(post, feed, postIndex) {
       var wrapper = document.createElement('div');
       wrapper.className = 'instafeed-item';
 
       var media;
-      if (post.mediaType === 'VIDEO') {
+      var isVideo = post.mediaType === 'VIDEO';
+      if (isVideo) {
         media = document.createElement('video');
         media.src = post.mediaUrl;
         media.muted = true;
         media.loop = true;
         media.playsInline = true;
+        media.preload = 'auto';
       } else {
         media = document.createElement('img');
         media.src = post.thumbnailUrl || post.mediaUrl;
@@ -175,9 +385,40 @@
         wrapper.appendChild(link);
       } else {
         media.addEventListener('click', function () {
-          renderPopup(post);
+          renderPopup(post, postIndex);
         });
         wrapper.appendChild(media);
+
+        if (isVideo) {
+          var playBtn = document.createElement('button');
+          playBtn.className = 'instafeed-play-btn';
+          playBtn.setAttribute('aria-label', 'Play video');
+          playBtn.innerHTML =
+            '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+          playBtn.onclick = function (event) {
+            event.stopPropagation();
+            renderPopup(post, postIndex);
+          };
+          wrapper.appendChild(playBtn);
+
+          wrapper.addEventListener('mouseenter', function () {
+            media.currentTime = 0;
+            var playPromise = media.play();
+            if (playPromise && playPromise.catch) {
+              playPromise.catch(function () {});
+            }
+          });
+          wrapper.addEventListener('mouseleave', function () {
+            media.pause();
+          });
+        }
+      }
+
+      if (feed.layout === 'list' && post.caption) {
+        var caption = document.createElement('p');
+        caption.className = 'instafeed-list-caption';
+        caption.textContent = post.caption;
+        wrapper.appendChild(caption);
       }
 
       return wrapper;
@@ -188,13 +429,19 @@
       .then(function (data) {
         var posts = data.posts || [];
         var feed = data.feed || {};
+        allPosts = posts;
 
         root.innerHTML = '';
         root.style.setProperty('--instafeed-gap', (spacingMap[feed.postSpacing] ?? 8) + 'px');
-        root.style.setProperty('--instafeed-aspect-ratio', aspectRatioCss(feed.aspectRatio));
-        root.style.setProperty('--instafeed-radius', feed.roundedCorners ? '8px' : '0px');
+        root.style.setProperty('--instafeed-size', (sizeMap[feed.postSize] || 140) + 'px');
+        root.style.setProperty('--instafeed-fit', feed.postFit === 'contain' ? 'contain' : 'cover');
         root.style.setProperty('--instafeed-cols-desktop', feed.colsDesktop || 4);
         root.style.setProperty('--instafeed-cols-mobile', feed.colsMobile || 2);
+
+        var isCircle = feed.postShape === 'circle';
+        root.classList.toggle('instafeed-shape-circle', isCircle);
+        root.style.setProperty('--instafeed-aspect-ratio', isCircle ? '1 / 1' : aspectRatioCss(feed.aspectRatio));
+        root.style.setProperty('--instafeed-radius', isCircle ? '9999px' : (feed.cornerRadius || 0) + 'px');
 
         if (posts.length === 0) {
           root.innerHTML = '<p>No Instagram posts yet.</p>';
@@ -215,21 +462,26 @@
           thumb.src = posts[0].thumbnailUrl || posts[0].mediaUrl;
           floating.appendChild(thumb);
           floating.addEventListener('click', function () {
-            renderPopup(posts[0]);
+            renderPopup(posts[0], 0);
           });
           root.appendChild(floating);
           return;
         }
 
         var container = document.createElement('div');
-        container.className = feed.layout === 'slider' ? 'instafeed-slider' : 'instafeed-grid';
+        var layoutClassMap = {
+          slider: 'instafeed-slider',
+          list: 'instafeed-list',
+          grid: 'instafeed-grid',
+        };
+        container.className = layoutClassMap[feed.layout] || 'instafeed-grid';
 
         var maxPosts = feed.layout === 'grid'
           ? (feed.rowsDesktop || 2) * (feed.colsDesktop || 4)
           : posts.length;
 
-        posts.slice(0, maxPosts).forEach(function (post) {
-          container.appendChild(buildPostElement(post, feed));
+        posts.slice(0, maxPosts).forEach(function (post, index) {
+          container.appendChild(buildPostElement(post, feed, index));
         });
 
         root.appendChild(container);

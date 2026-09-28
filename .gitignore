@@ -16,6 +16,9 @@ database.sqlite
 .env
 .env.*
 
+# User-uploaded custom media (differs per environment)
+/uploads
+
 # Schema/migrations differ between local (XAMPP) and server (MySQL) — edit each side directly
 /prisma/schema.prisma
 /prisma/migrations
