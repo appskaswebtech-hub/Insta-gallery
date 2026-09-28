@@ -31,20 +31,50 @@ export default function Auth() {
   return (
     <AppProvider apiKey={apiKey}>
       <s-page>
+        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
+          <h1 style={{ marginBottom: "0.5rem" }}>InstaGallery</h1>
+          <p>
+            Showcase your Instagram photos and videos on your storefront,
+            beautifully and automatically.
+          </p>
+        </div>
+
         <Form method="post">
-        <s-section heading="Log in">
-          <s-text-field
-            name="shop"
-            label="Shop domain"
-            details="example.myshopify.com"
-            value={shop}
-            onChange={(e) => setShop(e.currentTarget.value)}
-            autocomplete="on"
-            error={errors.shop}
-          ></s-text-field>
-          <s-button type="submit">Log in</s-button>
-        </s-section>
+          <s-section heading="Log in">
+            <s-text-field
+              name="shop"
+              label="Shop domain"
+              details="example.myshopify.com"
+              value={shop}
+              onChange={(e) => setShop(e.currentTarget.value)}
+              autocomplete="on"
+              error={errors.shop}
+            ></s-text-field>
+            <s-button type="submit">Log in</s-button>
+          </s-section>
         </Form>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "2rem",
+            marginTop: "2.5rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ flex: "1 1 200px" }}>
+            <strong>Automatic feeds.</strong> Connect once and your latest
+            posts stay in sync with your storefront, no manual work needed.
+          </div>
+          <div style={{ flex: "1 1 200px" }}>
+            <strong>Custom media.</strong> Add your own photos and videos
+            from your computer or a link, alongside your feed.
+          </div>
+          <div style={{ flex: "1 1 200px" }}>
+            <strong>Fully customizable.</strong> Choose the layout, shape,
+            size, and style that matches your store's look.
+          </div>
+        </div>
       </s-page>
     </AppProvider>
   );
