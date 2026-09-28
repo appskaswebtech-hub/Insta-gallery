@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -33,7 +34,29 @@ export default function App() {
 
 // Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // boundary.error() injects Shopify's recovery markup (e.g. the App Bridge
+  // bounce script) via dangerouslySetInnerHTML. Browsers never execute
+  // <script> tags inserted that way, so App Bridge would silently fail to
+  // load and the page would get stuck. Re-create any script tags so they
+  // actually run.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.querySelectorAll("script").forEach((oldScript) => {
+      const newScript = document.createElement("script");
+      Array.from(oldScript.attributes).forEach((attr) =>
+        newScript.setAttribute(attr.name, attr.value),
+      );
+      newScript.textContent = oldScript.textContent;
+      oldScript.replaceWith(newScript);
+    });
+  });
+
+  return <div ref={containerRef}>{boundary.error(error)}</div>;
 }
 
 export const headers: HeadersFunction = (headersArgs) => {
