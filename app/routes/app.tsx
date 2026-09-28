@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import {
+  Outlet,
+  isRouteErrorResponse,
+  useLoaderData,
+  useRouteError,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
@@ -62,12 +67,23 @@ export function ErrorBoundary() {
   const error = useRouteError();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // boundary.error() injects Shopify's recovery markup (e.g. the App Bridge
-  // bounce script) via dangerouslySetInnerHTML. Browsers never execute
-  // <script> tags inserted that way, so App Bridge would silently fail to
-  // load and the page would get stuck. Re-create any script tags so they
-  // actually run.
+  // boundary.error() detects Shopify's thrown responses by checking
+  // error.constructor.name === 'ErrorResponse', which breaks once the
+  // production build minifies class names (the check silently fails and it
+  // re-throws, leaving React Router's bare default fallback showing nothing
+  // but the raw status code). Use React Router's own minification-safe
+  // isRouteErrorResponse() instead.
+  const html = isRouteErrorResponse(error)
+    ? (error.data as string) || "Handling response"
+    : null;
+
+  // The recovered markup (e.g. the App Bridge bounce script) is injected via
+  // dangerouslySetInnerHTML. Browsers never execute <script> tags inserted
+  // that way, so App Bridge would silently fail to load and the page would
+  // get stuck. Re-create any script tags so they actually run.
   useEffect(() => {
+    if (html === null) return;
+
     // Not embedded in the Admin iframe at all (e.g. the app's bare URL was
     // opened directly) - App Bridge has no parent frame to recover shop
     // context from, so send the user to the manual login form instead of
@@ -90,7 +106,11 @@ export function ErrorBoundary() {
     });
   });
 
-  return <div ref={containerRef}>{boundary.error(error)}</div>;
+  if (html === null) {
+    throw error;
+  }
+
+  return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 export const headers: HeadersFunction = (headersArgs) => {
