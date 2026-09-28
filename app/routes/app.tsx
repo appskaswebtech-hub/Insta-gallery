@@ -43,6 +43,15 @@ export function ErrorBoundary() {
   // load and the page would get stuck. Re-create any script tags so they
   // actually run.
   useEffect(() => {
+    // Not embedded in the Admin iframe at all (e.g. the app's bare URL was
+    // opened directly) - App Bridge has no parent frame to recover shop
+    // context from, so send the user to the manual login form instead of
+    // leaving a blank page.
+    if (window.top === window.self) {
+      window.location.href = "/auth/login";
+      return;
+    }
+
     const container = containerRef.current;
     if (!container) return;
 
