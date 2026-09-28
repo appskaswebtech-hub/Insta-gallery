@@ -21,6 +21,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 // The App Bridge script tag loads asynchronously and sets window.shopify
 // once ready. Pages calling useAppBridge() before that finishes crash with
 // "The shopify global is not defined" - wait for it before rendering them.
+// Falls back to rendering anyway after 4s so a slow/blocked script can't
+// leave the page stuck blank forever.
 function useAppBridgeReady() {
   const [ready, setReady] = useState(
     () => typeof window !== "undefined" && Boolean((window as any).shopify),
@@ -32,11 +34,15 @@ function useAppBridgeReady() {
     const interval = setInterval(() => {
       if ((window as any).shopify) {
         setReady(true);
-        clearInterval(interval);
       }
     }, 50);
 
-    return () => clearInterval(interval);
+    const timeout = setTimeout(() => setReady(true), 4000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
   }, [ready]);
 
   return ready;
@@ -57,7 +63,13 @@ export default function App() {
         */}
 
       </s-app-nav>
-      {appBridgeReady ? <Outlet /> : null}
+      {appBridgeReady ? (
+        <Outlet />
+      ) : (
+        <s-page>
+          <s-spinner></s-spinner>
+        </s-page>
+      )}
     </AppProvider>
   );
 }
