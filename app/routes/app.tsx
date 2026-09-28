@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -13,8 +13,33 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
+// The App Bridge script tag loads asynchronously and sets window.shopify
+// once ready. Pages calling useAppBridge() before that finishes crash with
+// "The shopify global is not defined" - wait for it before rendering them.
+function useAppBridgeReady() {
+  const [ready, setReady] = useState(
+    () => typeof window !== "undefined" && Boolean((window as any).shopify),
+  );
+
+  useEffect(() => {
+    if (ready) return;
+
+    const interval = setInterval(() => {
+      if ((window as any).shopify) {
+        setReady(true);
+        clearInterval(interval);
+      }
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [ready]);
+
+  return ready;
+}
+
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
+  const appBridgeReady = useAppBridgeReady();
 
   return (
     <AppProvider apiKey={apiKey}>
@@ -25,9 +50,9 @@ export default function App() {
         {/* ANALYTICS DISABLED FOR NOW - uncomment to re-enable
         <s-link href="/app/analytics">Analytics</s-link>
         */}
-        
+
       </s-app-nav>
-      <Outlet />
+      {appBridgeReady ? <Outlet /> : null}
     </AppProvider>
   );
 }
