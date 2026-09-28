@@ -1,5 +1,5 @@
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData } from "react-router";
 
@@ -26,17 +26,19 @@ export default function Auth() {
   const [shop, setShop] = useState("");
   const { errors } = actionData || loaderData;
 
+  // If this page loads inside the Shopify Admin iframe (e.g. from a bare,
+  // param-less click on the app's own name, including client-side SPA
+  // transitions), force a top-level reload so Shopify re-attaches
+  // shop/host context instead of showing a broken login card stuck inside
+  // the embedded frame.
+  useEffect(() => {
+    if (window.top !== window.self) {
+      window.top!.location.href = window.location.href;
+    }
+  }, []);
+
   return (
     <AppProvider embedded={false}>
-      {/* If this page loads inside the Shopify Admin iframe (e.g. from a bare, */}
-      {/* param-less click on the app's own name), force a top-level reload so */}
-      {/* Shopify re-attaches shop/host context instead of showing a broken */}
-      {/* login card stuck inside the embedded frame. */}
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `if (window.top !== window.self) { window.top.location.href = window.location.href; }`,
-        }}
-      />
       <s-page>
         <Form method="post">
         <s-section heading="Log in">
