@@ -2,15 +2,8 @@ import type { LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const params = new URL(request.url).searchParams;
-  const fromShopify =
-    params.has("shop") || params.has("host") || params.has("embedded");
-
-  if (fromShopify) {
-    throw redirect(`/app?${params.toString()}`);
-  }
-
-  throw redirect("/auth/login");
+  const url = new URL(request.url);
+  throw redirect(`/app${url.search}`);
 };
 
 export default function Index() {
