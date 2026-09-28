@@ -14,18 +14,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw redirect(`/app/custom-media?${params.toString()}`);
   }
 
-  // Otherwise leave this as a plain page - a bare direct visit to the app's
-  // root URL shouldn't bounce anywhere.
   return null;
 };
 
 export default function Index() {
   useEffect(() => {
-    // Admin's own app-title click can land here with no query params even
-    // though we're genuinely embedded in its iframe. In that case, forward
-    // into the app so it can recover the session via App Bridge.
     if (window.top !== window.self) {
+      // Admin's own app-title click can land here with no query params even
+      // though we're genuinely embedded in its iframe. Forward into the app
+      // so it can recover the session via App Bridge.
       window.location.href = "/app/custom-media";
+    } else {
+      // A bare, standalone visit with no Shopify context at all - show the
+      // login form instead of a blank page.
+      window.location.href = "/auth/login";
     }
   }, []);
 
