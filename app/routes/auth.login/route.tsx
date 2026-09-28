@@ -1,5 +1,5 @@
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData } from "react-router";
 
@@ -9,7 +9,8 @@ import { loginErrorMessage } from "./error.server";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const errors = loginErrorMessage(await login(request));
 
-  return { errors };
+  // eslint-disable-next-line no-undef
+  return { errors, apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -25,20 +26,10 @@ export default function Auth() {
   const actionData = useActionData<typeof action>();
   const [shop, setShop] = useState("");
   const { errors } = actionData || loaderData;
-
-  // If this page loads inside the Shopify Admin iframe (e.g. from a bare,
-  // param-less click on the app's own name, including client-side SPA
-  // transitions), force a top-level reload so Shopify re-attaches
-  // shop/host context instead of showing a broken login card stuck inside
-  // the embedded frame.
-  useEffect(() => {
-    if (window.top !== window.self) {
-      window.top!.location.href = window.location.href;
-    }
-  }, []);
+  const { apiKey } = loaderData;
 
   return (
-    <AppProvider embedded={false}>
+    <AppProvider apiKey={apiKey}>
       <s-page>
         <Form method="post">
         <s-section heading="Log in">

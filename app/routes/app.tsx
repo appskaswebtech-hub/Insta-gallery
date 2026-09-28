@@ -16,7 +16,7 @@ export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
 
   return (
-    <AppProvider embedded apiKey={apiKey}>
+    <AppProvider apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app/custom-media">Custom media</s-link>
         <s-link href="/app/main-feed">Main feed</s-link>
