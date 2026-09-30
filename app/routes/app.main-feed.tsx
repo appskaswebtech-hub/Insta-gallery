@@ -190,7 +190,6 @@ export default function Index() {
                     <s-option value="grid">Grid</s-option>
                     <s-option value="slider">Slider</s-option>
                     <s-option value="list">List</s-option>
-                    <s-option value="floating">Floating post</s-option>
                   </s-select>
 
                   <s-grid-item gridColumn="1 / -1">
