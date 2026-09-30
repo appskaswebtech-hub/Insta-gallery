@@ -154,6 +154,10 @@ export default function CustomMedia() {
           }}
         >
           <s-stack direction="block" gap="base">
+            <s-text color="subdued">
+              Click the box below to browse your device, or drag and drop a
+              photo or video into it.
+            </s-text>
             <div
               style={{
                 position: "relative",
@@ -287,15 +291,15 @@ export default function CustomMedia() {
             </div>
           </s-stack>
         </form>
+      </s-section>
 
-        <s-divider></s-divider>
-
+      <s-section>
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: 16,
-            margin: "20px 0 16px 0",
+            marginBottom: 20,
           }}
         >
           <div
@@ -329,8 +333,7 @@ export default function CustomMedia() {
           <s-stack direction="block" gap="small-200">
             <s-heading>Upload from URL</s-heading>
             <s-text color="subdued">
-              Add your own images or videos to show alongside your Instagram
-              posts in the feed. Paste a direct image or video URL below.
+              Add an image or video by pasting a direct link to it below.
             </s-text>
           </s-stack>
         </div>
