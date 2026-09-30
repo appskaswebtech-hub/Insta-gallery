@@ -198,7 +198,7 @@ export default function Index() {
                       label="Feed title"
                       name="title"
                       defaultValue={feed.title ?? ""}
-                      placeholder="Leave empty if you don't want a title"
+                      placeholder="e.g. Media Gallery (leave empty for no title)"
                     ></s-text-field>
                   </s-grid-item>
 
