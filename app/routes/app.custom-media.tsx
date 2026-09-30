@@ -9,13 +9,19 @@ import {
   getCustomMedia,
 } from "../custom-media.server";
 import { saveUploadedFile, resolveMediaUrl } from "../uploads.server";
+import { getYouTubeThumbnailUrl } from "../youtube";
 import PageFooter from "../components/PageFooter";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const media = await getCustomMedia(session.shop);
   return {
-    media: media.map((item) => ({ ...item, url: resolveMediaUrl(item.url) })),
+    media: media.map((item) => ({
+      ...item,
+      url: resolveMediaUrl(item.url),
+      youtubeThumbnailUrl:
+        item.mediaType === "video" ? getYouTubeThumbnailUrl(item.url) : null,
+    })),
   };
 };
 
@@ -357,6 +363,7 @@ export default function CustomMedia() {
               name="url"
               icon="link"
               placeholder="https://example.com/image.jpg"
+              details="For video, you can paste a direct video file link or a YouTube link."
             ></s-text-field>
             <div>
               <s-button
@@ -378,8 +385,21 @@ export default function CustomMedia() {
             {media.map((item) => (
               <s-stack key={item.id} direction="block" gap="small-100">
                 <s-stack direction="block" gap="small-200">
-                  <s-badge>{item.mediaType}</s-badge>
-                  {item.mediaType === "video" ? (
+                  <s-badge>
+                    {item.youtubeThumbnailUrl ? "youtube" : item.mediaType}
+                  </s-badge>
+                  {item.youtubeThumbnailUrl ? (
+                    <img
+                      src={item.youtubeThumbnailUrl}
+                      alt=""
+                      style={{
+                        width: "120px",
+                        height: "120px",
+                        objectFit: "cover",
+                        borderRadius: "8px",
+                      }}
+                    />
+                  ) : item.mediaType === "video" ? (
                     <video
                       src={item.url}
                       style={{

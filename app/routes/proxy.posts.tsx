@@ -5,6 +5,7 @@ import { authenticate } from "../shopify.server";
 import { getCustomMedia } from "../custom-media.server";
 import { getFeed } from "../feed.server";
 import { resolveMediaUrl } from "../uploads.server";
+import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "../youtube";
 
 const DEFAULT_FEED = {
   postsToShow: "own_posts",
@@ -38,6 +39,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const posts = [
     ...customMedia.map((item) => {
+      const embedUrl =
+        item.mediaType === "video" ? getYouTubeEmbedUrl(item.url) : null;
+
+      if (embedUrl) {
+        return {
+          id: `custom-${item.id}`,
+          mediaType: "YOUTUBE",
+          mediaUrl: embedUrl,
+          thumbnailUrl: getYouTubeThumbnailUrl(item.url),
+          permalink: item.url,
+          caption: item.caption,
+        };
+      }
+
       const url = resolveMediaUrl(item.url);
       return {
         id: `custom-${item.id}`,
