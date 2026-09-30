@@ -67,7 +67,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       postsToShow: String(formData.get("postsToShow")),
       layout: String(formData.get("layout")),
       title: String(formData.get("title") ?? ""),
-      onPostClick: String(formData.get("onPostClick")),
+      onPostClick: "popup",
       postSpacing: String(formData.get("postSpacing")),
       aspectRatio: String(formData.get("aspectRatio")),
       postFit: String(formData.get("postFit")),
@@ -200,15 +200,6 @@ export default function Index() {
                       placeholder="e.g. Media Gallery (leave empty for no title)"
                     ></s-text-field>
                   </s-grid-item>
-
-                  <s-select
-                    label="On post click"
-                    name="onPostClick"
-                    value={feed.onPostClick}
-                  >
-                    <s-option value="popup">Open detailed popup</s-option>
-                    <s-option value="redirect">Go to Instagram post</s-option>
-                  </s-select>
 
                   <s-select
                     label="Post spacing"

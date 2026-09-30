@@ -34,8 +34,8 @@ export default function Auth() {
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
           <h1 style={{ marginBottom: "0.5rem" }}>InstaGallery</h1>
           <p>
-            Showcase your Instagram photos and videos on your storefront,
-            beautifully and automatically.
+            Showcase your photos and videos on your storefront, beautifully
+            and automatically.
           </p>
         </div>
 
@@ -63,12 +63,12 @@ export default function Auth() {
           }}
         >
           <div style={{ flex: "1 1 200px" }}>
-            <strong>Automatic feeds.</strong> Connect once and your latest
-            posts stay in sync with your storefront, no manual work needed.
+            <strong>Easy uploads.</strong> Add your own photos and videos
+            straight from your computer or a link, no coding needed.
           </div>
           <div style={{ flex: "1 1 200px" }}>
-            <strong>Custom media.</strong> Add your own photos and videos
-            from your computer or a link, alongside your feed.
+            <strong>Grid, slider, or list.</strong> Show your media feed in
+            the layout that fits your storefront best.
           </div>
           <div style={{ flex: "1 1 200px" }}>
             <strong>Fully customizable.</strong> Choose the layout, shape,

@@ -13,7 +13,7 @@ export default function Analytics() {
       <s-section heading="Feed performance">
         <s-stack direction="block" gap="base">
           <s-banner heading="Coming soon" tone="info">
-            We're building analytics for your Instagram feed. Here's what
+            We're building analytics for your media feed. Here's what
             you'll be able to track:
           </s-banner>
 

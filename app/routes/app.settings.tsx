@@ -124,7 +124,7 @@ export default function Settings() {
     <s-page heading="Settings">
       <s-section>
         <s-banner heading="Fine-tune the experience" tone="info">
-          These settings control how your Instagram feed behaves on the
+          These settings control how your media feed behaves on the
           storefront - loading, popups, and sliders. Changes apply
           immediately, no need to republish your theme.
         </s-banner>
@@ -144,8 +144,8 @@ export default function Settings() {
       <SettingRow
         iconPath="M14 4h6v6M10 14 20 4M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
         heading="Popup behavior"
-        label="Show link to the Instagram post on popup"
-        details="Adds a link to the original Instagram post inside the popup."
+        label="Show link to the original media on popup"
+        details="Adds a link to open the original photo or video file inside the popup."
         checked={settings.linkToOriginalPost}
         onChange={() =>
           toggle("linkToOriginalPost", settings.linkToOriginalPost)
