@@ -283,6 +283,17 @@ export function setInstagramPostHidden(id: string, hidden: boolean) {
   return prisma.instagramPost.update({ where: { id }, data: { hidden } });
 }
 
+export async function reorderInstagramPosts(shop: string, orderedIds: string[]) {
+  await prisma.$transaction(
+    orderedIds.map((id, index) =>
+      prisma.instagramPost.updateMany({
+        where: { shop, id },
+        data: { position: index },
+      }),
+    ),
+  );
+}
+
 export async function moveInstagramPost(
   shop: string,
   id: string,

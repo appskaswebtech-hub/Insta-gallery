@@ -7,7 +7,7 @@ import {
   addCustomMedia,
   deleteCustomMedia,
   getCustomMedia,
-  moveCustomMedia,
+  reorderCustomMedia,
   setCustomMediaHidden,
   setCustomMediaPinned,
 } from "../custom-media.server";
@@ -78,10 +78,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { updated: true };
   }
 
-  if (intent === "move") {
-    const id = String(formData.get("id"));
-    const direction = formData.get("direction") === "up" ? "up" : "down";
-    await moveCustomMedia(session.shop, id, direction);
+  if (intent === "reorder") {
+    const order = String(formData.get("order") ?? "")
+      .split(",")
+      .filter(Boolean);
+    await reorderCustomMedia(session.shop, order);
     return { updated: true };
   }
 
@@ -101,6 +102,12 @@ export default function CustomMedia() {
   );
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewIsVideo, setPreviewIsVideo] = useState(false);
+  const [orderedMedia, setOrderedMedia] = useState(media);
+  const dragIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setOrderedMedia(media);
+  }, [media]);
 
   useEffect(() => {
     if (fetcher.data?.added) {
@@ -145,8 +152,37 @@ export default function CustomMedia() {
       { method: "POST" },
     );
 
-  const moveMedia = (id: string, direction: "up" | "down") =>
-    itemFetcher.submit({ intent: "move", id, direction }, { method: "POST" });
+  const handleDragStart = (id: string) => () => {
+    dragIdRef.current = id;
+  };
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+  };
+
+  const handleDrop = (targetId: string) => (event: React.DragEvent) => {
+    event.preventDefault();
+    const draggedId = dragIdRef.current;
+    dragIdRef.current = null;
+    if (!draggedId || draggedId === targetId) return;
+
+    setOrderedMedia((prev) => {
+      const next = [...prev];
+      const fromIndex = next.findIndex((item) => item.id === draggedId);
+      const toIndex = next.findIndex((item) => item.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+
+      itemFetcher.submit(
+        { intent: "reorder", order: next.map((item) => item.id).join(",") },
+        { method: "POST" },
+      );
+
+      return next;
+    });
+  };
 
   return (
     <s-page heading="Custom media">
@@ -422,10 +458,19 @@ export default function CustomMedia() {
       {media.length > 0 && (
         <s-section heading={`Your custom media (${media.length})`}>
           <s-grid gridTemplateColumns="repeat(auto-fill, 150px)" gap="base">
-            {media.map((item, index) => (
-              <s-stack key={item.id} direction="block" gap="small-100">
+            {orderedMedia.map((item) => (
+              <div
+                key={item.id}
+                draggable
+                onDragStart={handleDragStart(item.id)}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop(item.id)}
+                style={{ cursor: "grab" }}
+              >
+              <s-stack direction="block" gap="small-100">
                 <s-stack direction="block" gap="small-200">
                   <s-stack direction="inline" gap="small-100">
+                    <s-icon type="drag-handle" size="small"></s-icon>
                     <s-badge>
                       {item.youtubeThumbnailUrl ? "youtube" : item.mediaType}
                     </s-badge>
@@ -473,20 +518,6 @@ export default function CustomMedia() {
                 <s-stack direction="inline" gap="small-100">
                   <s-button
                     variant="tertiary"
-                    icon="arrow-up"
-                    accessibilityLabel="Move up"
-                    disabled={index === 0}
-                    onClick={() => moveMedia(item.id, "up")}
-                  ></s-button>
-                  <s-button
-                    variant="tertiary"
-                    icon="arrow-down"
-                    accessibilityLabel="Move down"
-                    disabled={index === media.length - 1}
-                    onClick={() => moveMedia(item.id, "down")}
-                  ></s-button>
-                  <s-button
-                    variant="tertiary"
                     icon={item.pinned ? "star-filled" : "star"}
                     accessibilityLabel={item.pinned ? "Unpin" : "Pin"}
                     onClick={() => togglePin(item.id, item.pinned)}
@@ -508,6 +539,7 @@ export default function CustomMedia() {
                   Remove
                 </s-button>
               </s-stack>
+              </div>
             ))}
           </s-grid>
         </s-section>

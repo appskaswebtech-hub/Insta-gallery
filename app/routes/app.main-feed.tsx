@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -14,7 +14,7 @@ import {
   syncInstagramPosts,
   setInstagramPostPinned,
   setInstagramPostHidden,
-  moveInstagramPost,
+  reorderInstagramPosts,
 } from "../instagram.server";
 import { getFeed, saveFeed, type FeedInput } from "../feed.server";
 import PageFooter from "../components/PageFooter";
@@ -77,10 +77,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { type: "updated" as const };
   }
 
-  if (intent === "movePost") {
-    const id = String(formData.get("id"));
-    const direction = formData.get("direction") === "up" ? "up" : "down";
-    await moveInstagramPost(session.shop, id, direction);
+  if (intent === "reorderPosts") {
+    const order = String(formData.get("order") ?? "")
+      .split(",")
+      .filter(Boolean);
+    await reorderInstagramPosts(session.shop, order);
     return { type: "updated" as const };
   }
 
@@ -127,11 +128,47 @@ export default function Index() {
       { method: "POST" },
     );
 
-  const movePost = (id: string, direction: "up" | "down") =>
-    postFetcher.submit(
-      { intent: "movePost", id, direction },
-      { method: "POST" },
-    );
+  const [orderedPosts, setOrderedPosts] = useState(posts);
+  const dragIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setOrderedPosts(posts);
+  }, [posts]);
+
+  const handleDragStart = (id: string) => () => {
+    dragIdRef.current = id;
+  };
+
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+  };
+
+  const handleDrop = (targetId: string) => (event: React.DragEvent) => {
+    event.preventDefault();
+    const draggedId = dragIdRef.current;
+    dragIdRef.current = null;
+    if (!draggedId || draggedId === targetId) return;
+
+    setOrderedPosts((prev) => {
+      const next = [...prev];
+      const fromIndex = next.findIndex((item) => item.id === draggedId);
+      const toIndex = next.findIndex((item) => item.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+
+      postFetcher.submit(
+        {
+          intent: "reorderPosts",
+          order: next.map((item) => item.id).join(","),
+        },
+        { method: "POST" },
+      );
+
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (fetcher.data?.type === "sync") {
@@ -359,7 +396,7 @@ export default function Index() {
       {posts.length > 0 && (
         <s-section heading={`Synced posts (${posts.length})`}>
           <s-grid gridTemplateColumns="repeat(auto-fill, 130px)" gap="base">
-            {posts.map((post, index) => {
+            {orderedPosts.map((post) => {
               const mediaIcon =
                 post.mediaType === "VIDEO"
                   ? "video"
@@ -368,8 +405,17 @@ export default function Index() {
                     : "image";
 
               return (
-                <s-stack key={post.id} direction="block" gap="small-100">
+                <div
+                  key={post.id}
+                  draggable
+                  onDragStart={handleDragStart(post.id)}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop(post.id)}
+                  style={{ cursor: "grab" }}
+                >
+                <s-stack direction="block" gap="small-100">
                   <s-stack direction="inline" gap="small-100">
+                    <s-icon type="drag-handle" size="small"></s-icon>
                     {post.pinned && <s-badge tone="success">Pinned</s-badge>}
                     {post.hidden && <s-badge tone="critical">Hidden</s-badge>}
                   </s-stack>
@@ -427,20 +473,6 @@ export default function Index() {
                   <s-stack direction="inline" gap="small-100">
                     <s-button
                       variant="tertiary"
-                      icon="arrow-up"
-                      accessibilityLabel="Move up"
-                      disabled={index === 0}
-                      onClick={() => movePost(post.id, "up")}
-                    ></s-button>
-                    <s-button
-                      variant="tertiary"
-                      icon="arrow-down"
-                      accessibilityLabel="Move down"
-                      disabled={index === posts.length - 1}
-                      onClick={() => movePost(post.id, "down")}
-                    ></s-button>
-                    <s-button
-                      variant="tertiary"
                       icon={post.pinned ? "star-filled" : "star"}
                       accessibilityLabel={post.pinned ? "Unpin" : "Pin"}
                       onClick={() => togglePostPin(post.id, post.pinned)}
@@ -453,6 +485,7 @@ export default function Index() {
                     ></s-button>
                   </s-stack>
                 </s-stack>
+                </div>
               );
             })}
           </s-grid>

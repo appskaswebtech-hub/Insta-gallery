@@ -40,6 +40,17 @@ export function setCustomMediaHidden(shop: string, id: string, hidden: boolean) 
   return prisma.customMedia.updateMany({ where: { shop, id }, data: { hidden } });
 }
 
+export async function reorderCustomMedia(shop: string, orderedIds: string[]) {
+  await prisma.$transaction(
+    orderedIds.map((id, index) =>
+      prisma.customMedia.updateMany({
+        where: { shop, id },
+        data: { position: index },
+      }),
+    ),
+  );
+}
+
 export async function moveCustomMedia(
   shop: string,
   id: string,
