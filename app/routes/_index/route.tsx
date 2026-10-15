@@ -11,7 +11,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     params.has("host") ||
     params.has("embedded")
   ) {
-    throw redirect(`/app/custom-media?${params.toString()}`);
+    throw redirect(`/app/main-feed?${params.toString()}`);
   }
 
   return null;
@@ -23,7 +23,7 @@ export default function Index() {
       // Admin's own app-title click can land here with no query params even
       // though we're genuinely embedded in its iframe. Forward into the app
       // so it can recover the session via App Bridge.
-      window.location.href = "/app/custom-media";
+      window.location.href = "/app/main-feed";
     } else {
       // A bare, standalone visit with no Shopify context at all - show the
       // login form instead of a blank page.
