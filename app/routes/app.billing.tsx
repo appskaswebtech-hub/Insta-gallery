@@ -1,6 +1,6 @@
 import { useEffect } from "react";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useFetcher, useLoaderData } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
+import { useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
@@ -64,8 +64,17 @@ const plans = [
   },
 ];
 
+function getPlanSelectionUrl(shop: string) {
+  const appHandle = getAppPricingHandle();
+  if (!appHandle) return null;
+
+  const storeHandle = shop.replace(/\.myshopify\.com$/, "");
+  return `https://admin.shopify.com/store/${encodeURIComponent(storeHandle)}/charges/${encodeURIComponent(appHandle)}/pricing_plans`;
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const planSelectionUrl = getPlanSelectionUrl(session.shop);
   const config = getPartnerBillingConfig();
 
   if (!config) {
@@ -73,7 +82,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       activePlan: null,
       currentPeriodEnd: null,
       billingConfigured: false,
-      canChoosePlan: Boolean(getAppPricingHandle()),
+      planSelectionUrl,
       billingError: null,
       billingUpdated: false,
     };
@@ -105,7 +114,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       activePlan,
       currentPeriodEnd: subscription?.currentBillingCycle?.endTime ?? null,
       billingConfigured: true,
-      canChoosePlan: true,
+      planSelectionUrl,
       billingError: null,
       billingUpdated: new URL(request.url).searchParams.has("plan_handle"),
     };
@@ -144,28 +153,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       activePlan: null,
       currentPeriodEnd: null,
       billingConfigured: true,
-      canChoosePlan: true,
+      planSelectionUrl,
       billingError,
       billingUpdated: false,
     };
   }
-};
-
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session, redirect } = await authenticate.admin(request);
-  const appHandle = getAppPricingHandle();
-  const formData = await request.formData();
-  const plan = String(formData.get("plan") ?? "");
-
-  if (!plans.some((item) => item.handle === plan) || !appHandle) {
-    throw new Response("Billing plans are not configured for this app", {
-      status: 400,
-    });
-  }
-
-  const storeHandle = session.shop.replace(/\.myshopify\.com$/, "");
-  const pricingUrl = `https://admin.shopify.com/store/${encodeURIComponent(storeHandle)}/charges/${encodeURIComponent(appHandle)}/pricing_plans`;
-  return redirect(pricingUrl, { target: "_top" });
 };
 
 export default function Billing() {
@@ -173,13 +165,11 @@ export default function Billing() {
     activePlan,
     currentPeriodEnd,
     billingConfigured,
-    canChoosePlan,
+    planSelectionUrl,
     billingError,
     billingUpdated,
   } = useLoaderData<typeof loader>();
-  const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
-  const isSubmitting = ["loading", "submitting"].includes(fetcher.state);
 
   useEffect(() => {
     if (billingUpdated && activePlan) {
@@ -277,17 +267,14 @@ export default function Billing() {
                   ))}
                 </ul>
                 <div style={{ marginTop: "auto" }}>
-                  <fetcher.Form method="post">
-                    <input type="hidden" name="plan" value={plan.handle} />
-                    <s-button
-                      type="submit"
-                      variant={plan.name === "Pro" ? "primary" : "secondary"}
-                      disabled={!canChoosePlan || isCurrentPlan || isSubmitting}
-                      {...(isSubmitting && !isCurrentPlan ? { loading: true } : {})}
-                    >
-                      {isCurrentPlan ? "Current plan" : `Choose ${plan.name}`}
-                    </s-button>
-                  </fetcher.Form>
+                  <s-button
+                    href={planSelectionUrl ?? undefined}
+                    target="_top"
+                    variant={plan.name === "Pro" ? "primary" : "secondary"}
+                    disabled={!planSelectionUrl || isCurrentPlan}
+                  >
+                    {isCurrentPlan ? "Current plan" : `Choose ${plan.name}`}
+                  </s-button>
                 </div>
               </div>
             );
