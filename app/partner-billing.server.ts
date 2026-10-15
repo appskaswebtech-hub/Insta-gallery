@@ -57,10 +57,23 @@ export async function getActiveShopSubscription(
     errors?: Array<{ message: string }>;
   };
 
-  if (!response.ok || result.errors?.length || !result.data) {
+  if (!response.ok) {
+    const hint = response.status === 403
+      ? "Check that the Partner API client has Manage apps permission and belongs to the configured organization."
+      : response.status === 401
+        ? "Check that the Partner API access token is valid."
+        : "Check the Partner API credentials and app/shop IDs.";
+    throw new Error(`Partner API returned ${response.status}. ${hint}`);
+  }
+
+  if (result.errors?.length) {
     throw new Error(
-      `Shopify Partner API subscription lookup failed (${response.status})`,
+      `Partner API query failed: ${result.errors.map((error) => error.message).join("; ")}`,
     );
+  }
+
+  if (!result.data) {
+    throw new Error("Partner API returned no subscription data.");
   }
 
   return result.data.activeSubscription;

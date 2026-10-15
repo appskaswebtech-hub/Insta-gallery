@@ -74,38 +74,81 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       currentPeriodEnd: null,
       billingConfigured: false,
       canChoosePlan: Boolean(getAppPricingHandle()),
+      billingError: null,
       billingUpdated: false,
     };
   }
 
-  const shopResponse = await admin.graphql(`#graphql
-    query BillingShopId {
-      shop { id }
+  try {
+    const shopResponse = await admin.graphql(`#graphql
+      query BillingShopId {
+        shop { id }
+      }
+    `);
+    const shopResult = (await shopResponse.json()) as {
+      data?: { shop: { id: string } };
+      errors?: Array<{ message: string }>;
+    };
+
+    if (!shopResult.data?.shop.id || shopResult.errors?.length) {
+      throw new Error("Could not look up the current Shopify shop for billing.");
     }
-  `);
-  const shopResult = (await shopResponse.json()) as {
-    data?: { shop: { id: string } };
-    errors?: Array<{ message: string }>;
-  };
 
-  if (!shopResult.data?.shop.id || shopResult.errors?.length) {
-    throw new Error("Could not look up the current Shopify shop for billing");
+    const subscription = await getActiveShopSubscription(shopResult.data.shop.id);
+    const activePlan = subscription?.items.some((item) => item.handle === "pro")
+      ? "Pro"
+      : subscription?.items.some((item) => item.handle === "basic")
+        ? "Basic"
+        : "Free";
+
+    return {
+      activePlan,
+      currentPeriodEnd: subscription?.currentBillingCycle?.endTime ?? null,
+      billingConfigured: true,
+      canChoosePlan: true,
+      billingError: null,
+      billingUpdated: new URL(request.url).searchParams.has("plan_handle"),
+    };
+  } catch (error) {
+    // Shopify's server helpers can throw Response-like objects as well as
+    // Error instances. Preserve their useful status/message rather than
+    // replacing them with a generic message (or rendering [object Object]).
+    const details = error && typeof error === "object"
+      ? error as { message?: unknown; status?: unknown; statusText?: unknown; errors?: unknown }
+      : null;
+    const messages = Array.isArray(details?.errors)
+      ? details.errors
+          .map((item) => item && typeof item === "object" && "message" in item
+            ? String((item as { message: unknown }).message)
+            : String(item))
+          .join("; ")
+      : "";
+    let responseDetails = "";
+    if (error instanceof Response) {
+      try {
+        responseDetails = (await error.clone().text()).slice(0, 500).trim();
+      } catch {
+        // The response body may already be unavailable; status is still useful.
+      }
+    }
+    const billingError = error instanceof Error
+      ? error.message
+      : typeof details?.message === "string"
+        ? details.message
+        : typeof details?.status === "number"
+          ? `Shopify billing request failed (${details.status}${details.statusText ? ` ${String(details.statusText)}` : ""})${responseDetails ? `: ${responseDetails}` : ". Check the server log for details."}`
+          : messages || "Billing lookup failed with an unrecognized Shopify response. Check the server log for details.";
+    console.error("Billing subscription lookup failed:", error);
+
+    return {
+      activePlan: null,
+      currentPeriodEnd: null,
+      billingConfigured: true,
+      canChoosePlan: true,
+      billingError,
+      billingUpdated: false,
+    };
   }
-
-  const subscription = await getActiveShopSubscription(shopResult.data.shop.id);
-  const activePlan = subscription?.items.some((item) => item.handle === "pro")
-    ? "Pro"
-    : subscription?.items.some((item) => item.handle === "basic")
-      ? "Basic"
-      : "Free";
-
-  return {
-    activePlan,
-    currentPeriodEnd: subscription?.currentBillingCycle?.endTime ?? null,
-    billingConfigured: true,
-    canChoosePlan: true,
-    billingUpdated: new URL(request.url).searchParams.has("plan_handle"),
-  };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -131,6 +174,7 @@ export default function Billing() {
     currentPeriodEnd,
     billingConfigured,
     canChoosePlan,
+    billingError,
     billingUpdated,
   } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
@@ -154,6 +198,12 @@ export default function Billing() {
           <s-banner heading="Billing setup is required" tone="warning">
             Shopify App Pricing needs Partner API credentials and plans configured
             in the Partner Dashboard before merchants can select a plan.
+          </s-banner>
+        </s-section>
+      ) : billingError ? (
+        <s-section>
+          <s-banner heading="Could not verify your plan" tone="critical">
+            {billingError}
           </s-banner>
         </s-section>
       ) : (

@@ -9,11 +9,10 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
-import { authenticate } from "../shopify.server";
-
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
-
+export const loader = async (_args: LoaderFunctionArgs) => {
+  // Child routes authenticate their own loaders/actions. Authenticating here
+  // as well makes parent and child loaders exchange offline tokens in
+  // parallel on first install, which can race while storing the same session.
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };
 };
@@ -91,9 +90,8 @@ export function ErrorBoundary() {
   // re-throws, leaving React Router's bare default fallback showing nothing
   // but the raw status code). Use React Router's own minification-safe
   // isRouteErrorResponse() instead.
-  const html = isRouteErrorResponse(error)
-    ? (error.data as string) || "Handling response"
-    : null;
+  const responseData = isRouteErrorResponse(error) ? error.data : null;
+  const html = typeof responseData === "string" ? responseData : null;
 
   // The recovered markup (e.g. the App Bridge bounce script) is injected via
   // dangerouslySetInnerHTML. Browsers never execute <script> tags inserted
@@ -125,7 +123,27 @@ export function ErrorBoundary() {
   });
 
   if (html === null) {
-    throw error;
+    const details = isRouteErrorResponse(error)
+      ? typeof responseData === "undefined" || responseData === null
+        ? `Request failed (${error.status})`
+        : typeof responseData === "string"
+          ? responseData
+          : JSON.stringify(responseData)
+      : error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : JSON.stringify(error) || "An unexpected error occurred";
+
+    return (
+      <s-page heading="Something went wrong">
+        <s-section>
+          <s-banner heading="The page could not be loaded" tone="critical">
+            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{details}</pre>
+          </s-banner>
+        </s-section>
+      </s-page>
+    );
   }
 
   return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />;
