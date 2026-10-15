@@ -1,7 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
-// INSTAGRAM DISABLED FOR APP REVIEW - uncomment when Instagram connect is re-enabled
-// import { getInstagramPosts } from "../instagram.server";
+import { getInstagramPosts } from "../instagram.server";
 import { getCustomMedia } from "../custom-media.server";
 import { getFeed } from "../feed.server";
 import { resolveMediaUrl } from "../uploads.server";
@@ -31,9 +30,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return Response.json({ posts: [], feed: DEFAULT_FEED });
   }
 
-  // INSTAGRAM DISABLED FOR APP REVIEW - uncomment when Instagram connect is re-enabled
-  const [customMedia, feed] = await Promise.all([
+  const [customMedia, instagramPosts, feed] = await Promise.all([
     getCustomMedia(session.shop),
+    getInstagramPosts(session.shop),
     getFeed(session.shop),
   ]);
 
@@ -63,17 +62,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         caption: item.caption,
       };
     }),
-    // ...instagramPosts.map((post) => ({
-    //   id: post.id,
-    //   mediaType: post.mediaType,
-    //   mediaUrl: post.mediaUrl,
-    //   thumbnailUrl: post.thumbnailUrl,
-    //   permalink: post.permalink,
-    //   caption: post.caption,
-    //   carouselChildren: post.carouselChildren
-    //     ? JSON.parse(post.carouselChildren)
-    //     : null,
-    // })),
+    ...instagramPosts.map((post) => ({
+      id: post.id,
+      mediaType: post.mediaType,
+      mediaUrl: post.mediaUrl,
+      thumbnailUrl: post.thumbnailUrl,
+      permalink: post.permalink,
+      caption: post.caption,
+      carouselChildren: post.carouselChildren
+        ? JSON.parse(post.carouselChildren)
+        : null,
+    })),
   ];
 
   return Response.json({

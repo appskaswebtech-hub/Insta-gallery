@@ -231,7 +231,19 @@
 
     function createMediaEl(mediaType, url) {
       var el;
-      if (mediaType === 'VIDEO') {
+      if (mediaType === 'YOUTUBE') {
+        el = document.createElement('iframe');
+        el.src = url + (url.indexOf('?') === -1 ? '?' : '&') + 'autoplay=1';
+        el.setAttribute('frameborder', '0');
+        el.setAttribute(
+          'allow',
+          'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
+        );
+        el.setAttribute('allowfullscreen', '');
+        el.style.width = '100%';
+        el.style.height = '100%';
+        el.style.aspectRatio = '16 / 9';
+      } else if (mediaType === 'VIDEO') {
         el = document.createElement('video');
         el.src = url;
         el.controls = true;
@@ -362,6 +374,7 @@
 
       var media;
       var isVideo = post.mediaType === 'VIDEO';
+      var isYouTube = post.mediaType === 'YOUTUBE';
       if (isVideo) {
         media = document.createElement('video');
         media.src = post.mediaUrl;
@@ -389,7 +402,7 @@
         });
         wrapper.appendChild(media);
 
-        if (isVideo) {
+        if (isVideo || isYouTube) {
           var playBtn = document.createElement('button');
           playBtn.className = 'instafeed-play-btn';
           playBtn.setAttribute('aria-label', 'Play video');
@@ -400,7 +413,9 @@
             renderPopup(post, postIndex);
           };
           wrapper.appendChild(playBtn);
+        }
 
+        if (isVideo) {
           wrapper.addEventListener('mouseenter', function () {
             media.currentTime = 0;
             var playPromise = media.play();

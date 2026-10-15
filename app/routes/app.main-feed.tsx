@@ -8,12 +8,11 @@ import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-// INSTAGRAM DISABLED FOR APP REVIEW - uncomment when Instagram connect is re-enabled
-// import {
-//   getInstagramAccount,
-//   getInstagramPosts,
-//   syncInstagramPosts,
-// } from "../instagram.server";
+import {
+  getInstagramAccount,
+  getInstagramPosts,
+  syncInstagramPosts,
+} from "../instagram.server";
 import { getFeed, saveFeed, type FeedInput } from "../feed.server";
 import PageFooter from "../components/PageFooter";
 
@@ -37,15 +36,15 @@ const DEFAULT_FEED: FeedInput = {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
 
-  // INSTAGRAM DISABLED FOR APP REVIEW - uncomment when Instagram connect is re-enabled
-  // const instagramAccount = await getInstagramAccount(session.shop);
-  // const posts = instagramAccount ? await getInstagramPosts(session.shop) : [];
-  const posts: never[] = [];
+  const instagramAccount = await getInstagramAccount(session.shop);
+  const posts = instagramAccount ? await getInstagramPosts(session.shop) : [];
   const feed = await getFeed(session.shop);
 
   return {
     shop: session.shop,
-    instagram: { connected: false as const },
+    instagram: instagramAccount
+      ? { connected: true as const, username: instagramAccount.username }
+      : { connected: false as const },
     posts,
     feed: feed ?? DEFAULT_FEED,
   };
@@ -56,11 +55,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = formData.get("intent");
 
-  // INSTAGRAM DISABLED FOR APP REVIEW - uncomment when Instagram connect is re-enabled
-  // if (intent === "sync") {
-  //   const syncedCount = await syncInstagramPosts(session.shop);
-  //   return { type: "sync" as const, syncedCount };
-  // }
+  if (intent === "sync") {
+    const syncedCount = await syncInstagramPosts(session.shop);
+    return { type: "sync" as const, syncedCount };
+  }
 
   if (intent === "saveFeed") {
     const feed = await saveFeed(session.shop, {
@@ -87,24 +85,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Index() {
   const fetcher = useFetcher<typeof action>();
-  const { feed } = useLoaderData<typeof loader>();
+  const { shop, instagram, posts, feed } = useLoaderData<typeof loader>();
 
   const shopify = useAppBridge();
   const isSubmitting = ["loading", "submitting"].includes(fetcher.state);
 
   useEffect(() => {
-    // INSTAGRAM DISABLED FOR APP REVIEW - uncomment when Instagram connect is re-enabled
-    // if (fetcher.data?.type === "sync") {
-    //   shopify.toast.show(`Synced ${fetcher.data.syncedCount} posts`);
-    // }
+    if (fetcher.data?.type === "sync") {
+      shopify.toast.show(`Synced ${fetcher.data.syncedCount} posts`);
+    }
     if (fetcher.data?.type === "saveFeed") {
       shopify.toast.show("Feed saved");
     }
   }, [fetcher.data, shopify]);
 
-  // INSTAGRAM DISABLED FOR APP REVIEW - uncomment when Instagram connect is re-enabled
-  // const syncPosts = () =>
-  //   fetcher.submit({ intent: "sync" }, { method: "POST" });
+  const syncPosts = () =>
+    fetcher.submit({ intent: "sync" }, { method: "POST" });
 
   const saveFeedForm = (formData: FormData) => {
     formData.set("intent", "saveFeed");
@@ -113,7 +109,6 @@ export default function Index() {
 
   return (
     <s-page heading="InstaGallery">
-      {/* INSTAGRAM DISABLED FOR APP REVIEW - uncomment when Instagram connect is re-enabled
       <s-section heading="Instagram connection">
         {instagram.connected ? (
           <s-stack direction="block" gap="base">
@@ -155,7 +150,6 @@ export default function Index() {
           </s-stack>
         )}
       </s-section>
-      */}
 
       {(
         <s-section heading="Feed content">
@@ -170,7 +164,6 @@ export default function Index() {
               <s-stack direction="block" gap="base">
                 <s-heading>Layout &amp; display</s-heading>
                 <s-grid gridTemplateColumns="1fr 1fr" gap="base">
-                  {/* INSTAGRAM DISABLED FOR APP REVIEW - uncomment when Instagram connect is re-enabled
                   <s-select
                     label="Posts to show"
                     name="postsToShow"
@@ -179,8 +172,6 @@ export default function Index() {
                     <s-option value="own_posts">Own posts</s-option>
                     <s-option value="reels">Reels</s-option>
                   </s-select>
-                  */}
-                  <input type="hidden" name="postsToShow" value={feed.postsToShow} />
 
                   <s-select
                     label="Layout"
@@ -314,7 +305,6 @@ export default function Index() {
         </s-section>
       )}
 
-      {/* INSTAGRAM DISABLED FOR APP REVIEW - uncomment when Instagram connect is re-enabled
       {instagram.connected && posts.length === 0 && (
         <s-section>
           <s-banner heading="No posts synced yet" tone="info">
@@ -385,7 +375,6 @@ export default function Index() {
           </s-grid>
         </s-section>
       )}
-      */}
 
       <PageFooter />
     </s-page>
