@@ -7,6 +7,9 @@ import {
   addCustomMedia,
   deleteCustomMedia,
   getCustomMedia,
+  moveCustomMedia,
+  setCustomMediaHidden,
+  setCustomMediaPinned,
 } from "../custom-media.server";
 import { saveUploadedFile, resolveMediaUrl } from "../uploads.server";
 import { getYouTubeThumbnailUrl } from "../youtube";
@@ -61,6 +64,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { deleted: true };
   }
 
+  if (intent === "pin") {
+    const id = String(formData.get("id"));
+    const pinned = formData.get("pinned") === "true";
+    await setCustomMediaPinned(session.shop, id, pinned);
+    return { updated: true };
+  }
+
+  if (intent === "hide") {
+    const id = String(formData.get("id"));
+    const hidden = formData.get("hidden") === "true";
+    await setCustomMediaHidden(session.shop, id, hidden);
+    return { updated: true };
+  }
+
+  if (intent === "move") {
+    const id = String(formData.get("id"));
+    const direction = formData.get("direction") === "up" ? "up" : "down";
+    await moveCustomMedia(session.shop, id, direction);
+    return { updated: true };
+  }
+
   throw new Response("Unknown intent", { status: 400 });
 };
 
@@ -68,6 +92,7 @@ export default function CustomMedia() {
   const { media } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const uploadFetcher = useFetcher<typeof action>();
+  const itemFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const formRef = useRef<HTMLFormElement>(null);
   const uploadFormRef = useRef<HTMLFormElement>(null);
@@ -106,7 +131,22 @@ export default function CustomMedia() {
   const isUploading = ["loading", "submitting"].includes(uploadFetcher.state);
 
   const deleteMedia = (id: string) =>
-    fetcher.submit({ intent: "delete", id }, { method: "POST" });
+    itemFetcher.submit({ intent: "delete", id }, { method: "POST" });
+
+  const togglePin = (id: string, pinned: boolean) =>
+    itemFetcher.submit(
+      { intent: "pin", id, pinned: String(!pinned) },
+      { method: "POST" },
+    );
+
+  const toggleHide = (id: string, hidden: boolean) =>
+    itemFetcher.submit(
+      { intent: "hide", id, hidden: String(!hidden) },
+      { method: "POST" },
+    );
+
+  const moveMedia = (id: string, direction: "up" | "down") =>
+    itemFetcher.submit({ intent: "move", id, direction }, { method: "POST" });
 
   return (
     <s-page heading="Custom media">
@@ -381,48 +421,84 @@ export default function CustomMedia() {
 
       {media.length > 0 && (
         <s-section heading={`Your custom media (${media.length})`}>
-          <s-grid gridTemplateColumns="repeat(auto-fill, 120px)" gap="base">
-            {media.map((item) => (
+          <s-grid gridTemplateColumns="repeat(auto-fill, 150px)" gap="base">
+            {media.map((item, index) => (
               <s-stack key={item.id} direction="block" gap="small-100">
                 <s-stack direction="block" gap="small-200">
-                  <s-badge>
-                    {item.youtubeThumbnailUrl ? "youtube" : item.mediaType}
-                  </s-badge>
-                  {item.youtubeThumbnailUrl ? (
-                    <img
-                      src={item.youtubeThumbnailUrl}
-                      alt=""
-                      style={{
-                        width: "120px",
-                        height: "120px",
-                        objectFit: "cover",
-                        borderRadius: "8px",
-                      }}
-                    />
-                  ) : item.mediaType === "video" ? (
-                    <video
-                      src={item.url}
-                      style={{
-                        width: "120px",
-                        height: "120px",
-                        objectFit: "cover",
-                        borderRadius: "8px",
-                      }}
-                      muted
-                    />
-                  ) : (
-                    <img
-                      src={item.url}
-                      alt=""
-                      style={{
-                        width: "120px",
-                        height: "120px",
-                        objectFit: "cover",
-                        borderRadius: "8px",
-                      }}
-                    />
-                  )}
+                  <s-stack direction="inline" gap="small-100">
+                    <s-badge>
+                      {item.youtubeThumbnailUrl ? "youtube" : item.mediaType}
+                    </s-badge>
+                    {item.pinned && <s-badge tone="success">Pinned</s-badge>}
+                    {item.hidden && <s-badge tone="critical">Hidden</s-badge>}
+                  </s-stack>
+                  <div style={{ opacity: item.hidden ? 0.45 : 1 }}>
+                    {item.youtubeThumbnailUrl ? (
+                      <img
+                        src={item.youtubeThumbnailUrl}
+                        alt=""
+                        style={{
+                          width: "150px",
+                          height: "150px",
+                          objectFit: "cover",
+                          borderRadius: "8px",
+                        }}
+                      />
+                    ) : item.mediaType === "video" ? (
+                      <video
+                        src={item.url}
+                        style={{
+                          width: "150px",
+                          height: "150px",
+                          objectFit: "cover",
+                          borderRadius: "8px",
+                        }}
+                        muted
+                      />
+                    ) : (
+                      <img
+                        src={item.url}
+                        alt=""
+                        style={{
+                          width: "150px",
+                          height: "150px",
+                          objectFit: "cover",
+                          borderRadius: "8px",
+                        }}
+                      />
+                    )}
+                  </div>
                 </s-stack>
+
+                <s-stack direction="inline" gap="small-100">
+                  <s-button
+                    variant="tertiary"
+                    icon="arrow-up"
+                    accessibilityLabel="Move up"
+                    disabled={index === 0}
+                    onClick={() => moveMedia(item.id, "up")}
+                  ></s-button>
+                  <s-button
+                    variant="tertiary"
+                    icon="arrow-down"
+                    accessibilityLabel="Move down"
+                    disabled={index === media.length - 1}
+                    onClick={() => moveMedia(item.id, "down")}
+                  ></s-button>
+                  <s-button
+                    variant="tertiary"
+                    icon={item.pinned ? "star-filled" : "star"}
+                    accessibilityLabel={item.pinned ? "Unpin" : "Pin"}
+                    onClick={() => togglePin(item.id, item.pinned)}
+                  ></s-button>
+                  <s-button
+                    variant="tertiary"
+                    icon={item.hidden ? "eye-check-mark" : "eye-first"}
+                    accessibilityLabel={item.hidden ? "Unhide" : "Hide"}
+                    onClick={() => toggleHide(item.id, item.hidden)}
+                  ></s-button>
+                </s-stack>
+
                 <s-button
                   variant="tertiary"
                   tone="critical"

@@ -58,6 +58,7 @@ export default function App() {
         <s-link href="/app/custom-media">Custom media</s-link>
         <s-link href="/app/main-feed">Main feed</s-link>
         <s-link href="/app/settings">Settings</s-link>
+        <s-link href="/app/billing">Billing</s-link>
         {/* ANALYTICS DISABLED FOR NOW - uncomment to re-enable
         <s-link href="/app/analytics">Analytics</s-link>
         */}

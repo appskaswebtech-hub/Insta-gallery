@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { getInstagramPosts } from "../instagram.server";
-import { getCustomMedia } from "../custom-media.server";
+import { getVisibleCustomMedia } from "../custom-media.server";
 import { getFeed } from "../feed.server";
 import { resolveMediaUrl } from "../uploads.server";
 import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "../youtube";
@@ -31,7 +31,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const [customMedia, instagramPosts, feed] = await Promise.all([
-    getCustomMedia(session.shop),
+    getVisibleCustomMedia(session.shop),
     getInstagramPosts(session.shop),
     getFeed(session.shop),
   ]);
@@ -49,6 +49,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           thumbnailUrl: getYouTubeThumbnailUrl(item.url),
           permalink: item.url,
           caption: item.caption,
+          pinned: item.pinned,
         };
       }
 
@@ -60,6 +61,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         thumbnailUrl: item.mediaType === "video" ? null : url,
         permalink: url,
         caption: item.caption,
+        pinned: item.pinned,
       };
     }),
     ...instagramPosts.map((post) => ({
@@ -72,8 +74,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       carouselChildren: post.carouselChildren
         ? JSON.parse(post.carouselChildren)
         : null,
+      pinned: post.pinned,
     })),
-  ];
+  ].sort((a, b) => Number(b.pinned) - Number(a.pinned));
 
   return Response.json({
     posts,

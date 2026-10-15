@@ -258,9 +258,57 @@ export async function syncInstagramPosts(shop: string) {
   return media.length;
 }
 
-export function getInstagramPosts(shop: string) {
-  return prisma.instagramPost.findMany({
+export async function getInstagramPosts(shop: string) {
+  const posts = await prisma.instagramPost.findMany({
     where: { shop, hidden: false },
     orderBy: { timestamp: "desc" },
   });
+  return [...posts].sort(
+    (a, b) => Number(b.pinned) - Number(a.pinned) || a.position - b.position,
+  );
+}
+
+export function getAllInstagramPosts(shop: string) {
+  return prisma.instagramPost.findMany({
+    where: { shop },
+    orderBy: { timestamp: "desc" },
+  });
+}
+
+export function setInstagramPostPinned(id: string, pinned: boolean) {
+  return prisma.instagramPost.update({ where: { id }, data: { pinned } });
+}
+
+export function setInstagramPostHidden(id: string, hidden: boolean) {
+  return prisma.instagramPost.update({ where: { id }, data: { hidden } });
+}
+
+export async function moveInstagramPost(
+  shop: string,
+  id: string,
+  direction: "up" | "down",
+) {
+  const items = await prisma.instagramPost.findMany({
+    where: { shop },
+    orderBy: { timestamp: "desc" },
+  });
+  const index = items.findIndex((item) => item.id === id);
+  if (index === -1) return;
+
+  const swapIndex = direction === "up" ? index - 1 : index + 1;
+  if (swapIndex < 0 || swapIndex >= items.length) return;
+
+  const current = items[index];
+  const swapWith = items[swapIndex];
+
+  await prisma.$transaction([
+    prisma.instagramPost.update({
+      where: { id: current.id },
+      data: { position: swapWith.position },
+    }),
+    prisma.instagramPost.update({
+      where: { id: swapWith.id },
+      data: { position: current.position },
+    }),
+  ]);
 }

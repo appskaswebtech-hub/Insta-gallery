@@ -10,8 +10,11 @@ import { authenticate } from "../shopify.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   getInstagramAccount,
-  getInstagramPosts,
+  getAllInstagramPosts,
   syncInstagramPosts,
+  setInstagramPostPinned,
+  setInstagramPostHidden,
+  moveInstagramPost,
 } from "../instagram.server";
 import { getFeed, saveFeed, type FeedInput } from "../feed.server";
 import PageFooter from "../components/PageFooter";
@@ -37,7 +40,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
 
   const instagramAccount = await getInstagramAccount(session.shop);
-  const posts = instagramAccount ? await getInstagramPosts(session.shop) : [];
+  const posts = instagramAccount ? await getAllInstagramPosts(session.shop) : [];
   const feed = await getFeed(session.shop);
 
   return {
@@ -58,6 +61,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "sync") {
     const syncedCount = await syncInstagramPosts(session.shop);
     return { type: "sync" as const, syncedCount };
+  }
+
+  if (intent === "pinPost") {
+    const id = String(formData.get("id"));
+    const pinned = formData.get("pinned") === "true";
+    await setInstagramPostPinned(id, pinned);
+    return { type: "updated" as const };
+  }
+
+  if (intent === "hidePost") {
+    const id = String(formData.get("id"));
+    const hidden = formData.get("hidden") === "true";
+    await setInstagramPostHidden(id, hidden);
+    return { type: "updated" as const };
+  }
+
+  if (intent === "movePost") {
+    const id = String(formData.get("id"));
+    const direction = formData.get("direction") === "up" ? "up" : "down";
+    await moveInstagramPost(session.shop, id, direction);
+    return { type: "updated" as const };
   }
 
   if (intent === "saveFeed") {
@@ -85,10 +109,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Index() {
   const fetcher = useFetcher<typeof action>();
+  const postFetcher = useFetcher<typeof action>();
   const { shop, instagram, posts, feed } = useLoaderData<typeof loader>();
 
   const shopify = useAppBridge();
   const isSubmitting = ["loading", "submitting"].includes(fetcher.state);
+
+  const togglePostPin = (id: string, pinned: boolean) =>
+    postFetcher.submit(
+      { intent: "pinPost", id, pinned: String(!pinned) },
+      { method: "POST" },
+    );
+
+  const togglePostHide = (id: string, hidden: boolean) =>
+    postFetcher.submit(
+      { intent: "hidePost", id, hidden: String(!hidden) },
+      { method: "POST" },
+    );
+
+  const movePost = (id: string, direction: "up" | "down") =>
+    postFetcher.submit(
+      { intent: "movePost", id, direction },
+      { method: "POST" },
+    );
 
   useEffect(() => {
     if (fetcher.data?.type === "sync") {
@@ -315,8 +358,8 @@ export default function Index() {
 
       {posts.length > 0 && (
         <s-section heading={`Synced posts (${posts.length})`}>
-          <s-grid gridTemplateColumns="repeat(auto-fill, 100px)" gap="base">
-            {posts.map((post) => {
+          <s-grid gridTemplateColumns="repeat(auto-fill, 130px)" gap="base">
+            {posts.map((post, index) => {
               const mediaIcon =
                 post.mediaType === "VIDEO"
                   ? "video"
@@ -325,51 +368,91 @@ export default function Index() {
                     : "image";
 
               return (
-                <div key={post.id} style={{ position: "relative" }}>
-                  <img
-                    src={post.thumbnailUrl ?? post.mediaUrl}
-                    alt={post.caption ?? ""}
-                    style={{
-                      width: 100,
-                      height: 100,
-                      objectFit: "cover",
-                      borderRadius: 8,
-                      display: "block",
-                      background: "#f1f2f3",
-                    }}
-                    onError={(event) => {
-                      const img = event.currentTarget;
-                      img.onerror = null;
-                      img.src =
-                        "data:image/svg+xml;utf8," +
-                        encodeURIComponent(
-                          '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">' +
-                            '<rect width="100" height="100" fill="#f1f2f3"/>' +
-                            '<rect x="22" y="28" width="56" height="44" rx="4" fill="none" stroke="#c4c6c9" stroke-width="3"/>' +
-                            '<circle cx="36" cy="42" r="5" fill="#c4c6c9"/>' +
-                            '<path d="M22 64 L42 48 L56 60 L68 48 L78 60 L78 68 L22 68 Z" fill="#c4c6c9"/>' +
-                            "</svg>",
-                        );
-                    }}
-                  />
+                <s-stack key={post.id} direction="block" gap="small-100">
+                  <s-stack direction="inline" gap="small-100">
+                    {post.pinned && <s-badge tone="success">Pinned</s-badge>}
+                    {post.hidden && <s-badge tone="critical">Hidden</s-badge>}
+                  </s-stack>
                   <div
                     style={{
-                      position: "absolute",
-                      top: 6,
-                      right: 6,
-                      background: "rgba(255, 255, 255, 0.9)",
-                      borderRadius: 6,
-                      width: 22,
-                      height: 22,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                      position: "relative",
+                      opacity: post.hidden ? 0.45 : 1,
                     }}
                   >
-                    <s-icon type={mediaIcon} size="small"></s-icon>
+                    <img
+                      src={post.thumbnailUrl ?? post.mediaUrl}
+                      alt={post.caption ?? ""}
+                      style={{
+                        width: 130,
+                        height: 130,
+                        objectFit: "cover",
+                        borderRadius: 8,
+                        display: "block",
+                        background: "#f1f2f3",
+                      }}
+                      onError={(event) => {
+                        const img = event.currentTarget;
+                        img.onerror = null;
+                        img.src =
+                          "data:image/svg+xml;utf8," +
+                          encodeURIComponent(
+                            '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">' +
+                              '<rect width="100" height="100" fill="#f1f2f3"/>' +
+                              '<rect x="22" y="28" width="56" height="44" rx="4" fill="none" stroke="#c4c6c9" stroke-width="3"/>' +
+                              '<circle cx="36" cy="42" r="5" fill="#c4c6c9"/>' +
+                              '<path d="M22 64 L42 48 L56 60 L68 48 L78 60 L78 68 L22 68 Z" fill="#c4c6c9"/>' +
+                              "</svg>",
+                          );
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 6,
+                        right: 6,
+                        background: "rgba(255, 255, 255, 0.9)",
+                        borderRadius: 6,
+                        width: 22,
+                        height: 22,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                      }}
+                    >
+                      <s-icon type={mediaIcon} size="small"></s-icon>
+                    </div>
                   </div>
-                </div>
+
+                  <s-stack direction="inline" gap="small-100">
+                    <s-button
+                      variant="tertiary"
+                      icon="arrow-up"
+                      accessibilityLabel="Move up"
+                      disabled={index === 0}
+                      onClick={() => movePost(post.id, "up")}
+                    ></s-button>
+                    <s-button
+                      variant="tertiary"
+                      icon="arrow-down"
+                      accessibilityLabel="Move down"
+                      disabled={index === posts.length - 1}
+                      onClick={() => movePost(post.id, "down")}
+                    ></s-button>
+                    <s-button
+                      variant="tertiary"
+                      icon={post.pinned ? "star-filled" : "star"}
+                      accessibilityLabel={post.pinned ? "Unpin" : "Pin"}
+                      onClick={() => togglePostPin(post.id, post.pinned)}
+                    ></s-button>
+                    <s-button
+                      variant="tertiary"
+                      icon={post.hidden ? "eye-check-mark" : "eye-first"}
+                      accessibilityLabel={post.hidden ? "Unhide" : "Hide"}
+                      onClick={() => togglePostHide(post.id, post.hidden)}
+                    ></s-button>
+                  </s-stack>
+                </s-stack>
               );
             })}
           </s-grid>
