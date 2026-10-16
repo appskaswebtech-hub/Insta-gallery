@@ -266,7 +266,7 @@ export default function Index() {
                     <s-option value="list">List</s-option>
                   </s-select>
 
-                  <s-grid-item gridColumn="1 / -1">
+                  <s-grid-item gridColumn="span 2">
                     <s-text-field
                       label="Feed title"
                       name="title"

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
@@ -73,8 +73,16 @@ function getPlanSelectionUrl(shop: string) {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, redirect, session } = await authenticate.admin(request);
   const planSelectionUrl = getPlanSelectionUrl(session.shop);
+  const requestUrl = new URL(request.url);
+
+  // Shopify's embedded redirect helper handles the iframe-to-Admin navigation.
+  // Assigning window.top.location from the client is blocked in embedded apps.
+  if (requestUrl.searchParams.get("choose_plan") === "1" && planSelectionUrl) {
+    return redirect(planSelectionUrl, { target: "_top" });
+  }
+
   const config = getPartnerBillingConfig();
 
   let shopId: string | null = null;
@@ -136,7 +144,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       billingConfigured: true,
       planSelectionUrl,
       billingError: null,
-      billingUpdated: new URL(request.url).searchParams.has("plan_handle"),
+      billingUpdated: requestUrl.searchParams.has("plan_handle"),
       isDevelopmentStore,
       requiresBilling: isDevelopmentStore === false && !subscription,
     };
@@ -195,6 +203,7 @@ export default function Billing() {
     isDevelopmentStore,
   } = useLoaderData<typeof loader>();
   const shopify = useAppBridge();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (billingUpdated && activePlan) {
@@ -312,7 +321,9 @@ export default function Billing() {
                       }
 
                       if (planSelectionUrl) {
-                        (window.top ?? window).location.assign(planSelectionUrl);
+                        // Navigate through React Router so the server can use
+                        // Shopify's embedded redirect helper for the top frame.
+                        navigate("?choose_plan=1");
                       }
                     }}
                   >
