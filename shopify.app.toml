@@ -2,6 +2,7 @@
 
 client_id = "cddd2785e3764c63a8064ed10b1926da"
 name = "InstaGallery"
+handle = "instagallery-4"
 application_url = "https://instavo.kaswebtechsolutions.com"
 embedded = true
 
