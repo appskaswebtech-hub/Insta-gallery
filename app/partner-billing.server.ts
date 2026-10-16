@@ -1,4 +1,8 @@
 const PARTNER_API_VERSION = "2026-07";
+// This is the app handle used in Shopify Admin and Shopify App Pricing URLs.
+// Keep it aligned with the `handle` in shopify.app.toml; do not derive it from
+// an environment variable that can be confused with plan handles (free/basic/pro).
+const SHOPIFY_APP_HANDLE = "instagallery-4";
 
 export interface ActiveShopSubscription {
   items: Array<{ handle: string }>;
@@ -7,7 +11,7 @@ export interface ActiveShopSubscription {
 }
 
 export function getAppPricingHandle() {
-  return process.env.SHOPIFY_APP_HANDLE || null;
+  return SHOPIFY_APP_HANDLE;
 }
 
 export function getPartnerBillingConfig() {
