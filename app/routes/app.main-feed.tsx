@@ -7,6 +7,7 @@ import type {
 import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { requireActivePlanForLiveStore } from "../billing-access.server";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   getInstagramAccount,
@@ -37,7 +38,8 @@ const DEFAULT_FEED: FeedInput = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  await requireActivePlanForLiveStore(admin, request);
 
   const instagramAccount = await getInstagramAccount(session.shop);
   const posts = instagramAccount ? await getAllInstagramPosts(session.shop) : [];
@@ -54,7 +56,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  await requireActivePlanForLiveStore(admin, request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 

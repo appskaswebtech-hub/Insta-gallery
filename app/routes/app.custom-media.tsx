@@ -3,6 +3,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { requireActivePlanForLiveStore } from "../billing-access.server";
 import {
   addCustomMedia,
   deleteCustomMedia,
@@ -16,7 +17,8 @@ import { getYouTubeThumbnailUrl } from "../youtube";
 import PageFooter from "../components/PageFooter";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  await requireActivePlanForLiveStore(admin, request);
   const media = await getCustomMedia(session.shop);
   return {
     media: media.map((item) => ({
@@ -29,7 +31,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  await requireActivePlanForLiveStore(admin, request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 

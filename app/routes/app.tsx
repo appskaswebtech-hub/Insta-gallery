@@ -4,6 +4,7 @@ import {
   Outlet,
   isRouteErrorResponse,
   useLoaderData,
+  useMatches,
   useRouteError,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -54,14 +55,23 @@ function useAppBridgeReady() {
 
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
+  const matches = useMatches();
+  const billingMatch = matches.find((match) => match.pathname === "/app/billing");
+  const requiresBilling = Boolean(
+    (billingMatch?.data as { requiresBilling?: boolean } | undefined)?.requiresBilling,
+  );
   const appBridgeReady = useAppBridgeReady();
 
   return (
     <AppProvider apiKey={apiKey}>
       <s-app-nav>
-        <s-link href="/app/main-feed">Main feed</s-link>
-        <s-link href="/app/custom-media">Custom media</s-link>
-        <s-link href="/app/settings">Settings</s-link>
+        {!requiresBilling && (
+          <>
+            <s-link href="/app/main-feed">Main feed</s-link>
+            <s-link href="/app/custom-media">Custom media</s-link>
+            <s-link href="/app/settings">Settings</s-link>
+          </>
+        )}
         <s-link href="/app/billing">Billing</s-link>
         {/* ANALYTICS DISABLED FOR NOW - uncomment to re-enable
         <s-link href="/app/analytics">Analytics</s-link>

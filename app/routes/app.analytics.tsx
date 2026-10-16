@@ -1,9 +1,11 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
+import { requireActivePlanForLiveStore } from "../billing-access.server";
 import PageFooter from "../components/PageFooter";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
+  await requireActivePlanForLiveStore(admin, request);
   return null;
 };
 

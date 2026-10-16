@@ -77,6 +77,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const planSelectionUrl = getPlanSelectionUrl(session.shop);
   const config = getPartnerBillingConfig();
 
+  let shopId: string | null = null;
+  let isDevelopmentStore: boolean | null = null;
+  let shopLookupError: unknown = null;
+
+  try {
+    const shopResponse = await admin.graphql(`#graphql
+      query BillingShopDetails {
+        shop {
+          id
+          plan { partnerDevelopment }
+        }
+      }
+    `);
+    const shopResult = (await shopResponse.json()) as {
+      data?: { shop: { id: string; plan: { partnerDevelopment: boolean } } };
+      errors?: Array<{ message: string }>;
+    };
+
+    if (!shopResult.data?.shop.id || shopResult.errors?.length) {
+      throw new Error("Could not look up the current Shopify shop for billing.");
+    }
+
+    shopId = shopResult.data.shop.id;
+    isDevelopmentStore = shopResult.data.shop.plan.partnerDevelopment;
+  } catch (error) {
+    shopLookupError = error;
+    console.error("Billing shop lookup failed:", error);
+  }
+
   if (!config) {
     return {
       activePlan: null,
@@ -85,25 +114,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       planSelectionUrl,
       billingError: null,
       billingUpdated: false,
+      isDevelopmentStore,
+      requiresBilling: isDevelopmentStore === false,
     };
   }
 
   try {
-    const shopResponse = await admin.graphql(`#graphql
-      query BillingShopId {
-        shop { id }
-      }
-    `);
-    const shopResult = (await shopResponse.json()) as {
-      data?: { shop: { id: string } };
-      errors?: Array<{ message: string }>;
-    };
+    if (shopLookupError) throw shopLookupError;
+    if (!shopId) throw new Error("Could not look up the current Shopify shop for billing.");
 
-    if (!shopResult.data?.shop.id || shopResult.errors?.length) {
-      throw new Error("Could not look up the current Shopify shop for billing.");
-    }
-
-    const subscription = await getActiveShopSubscription(shopResult.data.shop.id);
+    const subscription = await getActiveShopSubscription(shopId);
     const activePlan = subscription?.items.some((item) => item.handle === "pro")
       ? "Pro"
       : subscription?.items.some((item) => item.handle === "basic")
@@ -117,6 +137,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       planSelectionUrl,
       billingError: null,
       billingUpdated: new URL(request.url).searchParams.has("plan_handle"),
+      isDevelopmentStore,
+      requiresBilling: isDevelopmentStore === false && !subscription,
     };
   } catch (error) {
     // Shopify's server helpers can throw Response-like objects as well as
@@ -156,6 +178,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       planSelectionUrl,
       billingError,
       billingUpdated: false,
+      isDevelopmentStore,
+      requiresBilling: isDevelopmentStore === false,
     };
   }
 };
@@ -168,6 +192,7 @@ export default function Billing() {
     planSelectionUrl,
     billingError,
     billingUpdated,
+    isDevelopmentStore,
   } = useLoaderData<typeof loader>();
   const shopify = useAppBridge();
 
@@ -183,6 +208,14 @@ export default function Billing() {
 
   return (
     <s-page heading="Billing">
+      {isDevelopmentStore && (
+        <s-section>
+          <s-banner heading="Plan selection is for live stores" tone="warning">
+            Development stores can use InstaGallery for testing. Choose a plan
+            from a live Shopify store to continue to billing approval.
+          </s-banner>
+        </s-section>
+      )}
       {!billingConfigured ? (
         <s-section>
           <s-banner heading="Billing setup is required" tone="warning">
@@ -199,7 +232,9 @@ export default function Billing() {
       ) : (
         <s-section>
           <s-banner heading={`Your current plan: ${activePlan}`} tone="info">
-            {activePlan === "Free"
+            {isDevelopmentStore
+              ? "This development store is for testing. Plan selection is available on live stores."
+              : activePlan === "Free"
               ? "Choose a plan to change how many posts can appear in your storefront gallery."
               : `Your ${activePlan} plan is active${periodEndLabel ? ` until ${periodEndLabel}` : ""}.`}
           </s-banner>
@@ -268,10 +303,13 @@ export default function Billing() {
                 </ul>
                 <div style={{ marginTop: "auto" }}>
                   <s-button
-                    href={planSelectionUrl ?? undefined}
+                    href={isDevelopmentStore ? undefined : planSelectionUrl ?? undefined}
                     target="_top"
                     variant={plan.name === "Pro" ? "primary" : "secondary"}
-                    disabled={!planSelectionUrl || isCurrentPlan}
+                    disabled={isCurrentPlan || (!isDevelopmentStore && !planSelectionUrl)}
+                    onClick={isDevelopmentStore
+                      ? () => shopify.toast.show("Plan selection is available only on live Shopify stores.")
+                      : undefined}
                   >
                     {isCurrentPlan ? "Current plan" : `Choose ${plan.name}`}
                   </s-button>

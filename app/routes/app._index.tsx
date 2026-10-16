@@ -5,7 +5,7 @@ import { authenticate } from "../shopify.server";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
   const url = new URL(request.url);
-  throw redirect(`/app/main-feed${url.search}`);
+  throw redirect(`/app/billing${url.search}`);
 };
 
 export default function Index() {
