@@ -303,13 +303,18 @@ export default function Billing() {
                 </ul>
                 <div style={{ marginTop: "auto" }}>
                   <s-button
-                    href={isDevelopmentStore ? undefined : planSelectionUrl ?? undefined}
-                    target="_top"
                     variant={plan.name === "Pro" ? "primary" : "secondary"}
                     disabled={isCurrentPlan || (!isDevelopmentStore && !planSelectionUrl)}
-                    onClick={isDevelopmentStore
-                      ? () => shopify.toast.show("Plan selection is available only on live Shopify stores.")
-                      : undefined}
+                    onClick={() => {
+                      if (isDevelopmentStore) {
+                        shopify.toast.show("Plan selection is available only on live Shopify stores.");
+                        return;
+                      }
+
+                      if (planSelectionUrl) {
+                        (window.top ?? window).location.assign(planSelectionUrl);
+                      }
+                    }}
                   >
                     {isCurrentPlan ? "Current plan" : `Choose ${plan.name}`}
                   </s-button>
