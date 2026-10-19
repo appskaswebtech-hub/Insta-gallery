@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useLoaderData, useNavigation } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
@@ -136,9 +136,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const planHandle = String(formData.get("plan") ?? "");
   const plan = plans.find((item) => item.handle === planHandle);
 
-  if (!plan) {
-    throw redirect(`/app/billing?checkout_error=${encodeURIComponent("Unknown plan selected.")}`);
-  }
+  if (!plan) return { error: "Unknown plan selected." };
 
   try {
     if (plan.handle === "free") {
@@ -177,12 +175,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       test: isDevelopmentStore,
     });
 
-    throw redirect(confirmationUrl, { target: "_top" });
+    return { confirmationUrl };
   } catch (error) {
     if (error instanceof Response) throw error;
     console.error("Could not start checkout for plan:", plan.handle, error);
-    const message = error instanceof Error ? error.message : "Could not start checkout.";
-    throw redirect(`/app/billing?checkout_error=${encodeURIComponent(message)}`);
+    return {
+      error: error instanceof Error ? error.message : "Could not start checkout.",
+    };
   }
 };
 
@@ -195,7 +194,23 @@ export default function Billing() {
     isDevelopmentStore,
   } = useLoaderData<typeof loader>();
   const shopify = useAppBridge();
-  const navigation = useNavigation();
+  const fetcher = useFetcher<typeof action>();
+
+  useEffect(() => {
+    const confirmationUrl = fetcher.data && "confirmationUrl" in fetcher.data
+      ? fetcher.data.confirmationUrl
+      : null;
+    if (!confirmationUrl) return;
+
+    if (window.top) window.top.location.href = confirmationUrl;
+    else window.location.href = confirmationUrl;
+  }, [fetcher.data]);
+
+  useEffect(() => {
+    if (fetcher.data && "error" in fetcher.data && fetcher.data.error) {
+      shopify.toast.show(fetcher.data.error, { isError: true });
+    }
+  }, [fetcher.data, shopify]);
 
   useEffect(() => {
     if (billingUpdated && activePlan) {
@@ -240,9 +255,7 @@ export default function Billing() {
         >
           {plans.map((plan) => {
             const isCurrentPlan = activePlan === plan.name;
-            const isSubmitting =
-              navigation.state !== "idle" &&
-              navigation.formData?.get("plan") === plan.handle;
+            const isSubmitting = fetcher.state !== "idle";
             return (
               <div
                 key={plan.name}
@@ -297,17 +310,17 @@ export default function Billing() {
                   ))}
                 </ul>
                 <div style={{ marginTop: "auto" }}>
-                  <Form method="post">
+                  <fetcher.Form method="post">
                     <input type="hidden" name="plan" value={plan.handle} />
                     <s-button
                       type="submit"
                       variant={plan.name === "Pro" ? "primary" : "secondary"}
-                      disabled={isCurrentPlan || navigation.state !== "idle"}
+                      disabled={isCurrentPlan || isSubmitting}
                       {...(isSubmitting ? { loading: true } : {})}
                     >
                       {isCurrentPlan ? "Current plan" : `Choose ${plan.name}`}
                     </s-button>
-                  </Form>
+                  </fetcher.Form>
                 </div>
               </div>
             );
