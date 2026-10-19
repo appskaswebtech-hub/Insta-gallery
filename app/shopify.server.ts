@@ -13,6 +13,11 @@ const shopify = shopifyApp({
   apiVersion: ApiVersion.July26,
   scopes: process.env.SCOPES?.split(","),
   appUrl: process.env.SHOPIFY_APP_URL || "",
+  // Required: Shopify no longer accepts non-expiring offline access tokens
+  // on the Admin API ("Non-expiring access tokens are no longer accepted").
+  future: {
+    expiringOfflineAccessTokens: true,
+  },
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
