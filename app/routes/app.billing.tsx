@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { useFetcher, useLoaderData } from "react-router";
+import { Form, useLoaderData, useNavigation } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
@@ -73,6 +73,7 @@ function planNameFromSubscriptionName(name: string) {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const requestUrl = new URL(request.url);
+  const checkoutError = requestUrl.searchParams.get("checkout_error");
 
   let isDevelopmentStore = false;
   try {
@@ -97,12 +98,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ? planNameFromSubscriptionName(subscription.name)
       : "Free";
 
-    await setCachedPlanHandle(session.shop, activePlan.toLowerCase());
+    // Plan lookup is authoritative for this page. Keep a cache write failure
+    // (for example, a stale Prisma Client or missing ShopPlan table) from
+    // making a valid Shopify subscription look unverifiable to the merchant.
+    try {
+      await setCachedPlanHandle(session.shop, activePlan.toLowerCase());
+    } catch (cacheError) {
+      console.error("Could not cache the resolved billing plan:", cacheError);
+    }
 
     return {
       activePlan,
       currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
-      billingError: null,
+      billingError: checkoutError,
       billingUpdated: requestUrl.searchParams.has("plan_handle"),
       isDevelopmentStore,
       requiresBilling: isDevelopmentStore === false && !subscription,
@@ -113,7 +121,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       activePlan: null,
       currentPeriodEnd: null,
       billingError:
-        error instanceof Error ? error.message : "Could not verify your plan.",
+        checkoutError ??
+        (error instanceof Error ? error.message : "Could not verify your plan."),
       billingUpdated: false,
       isDevelopmentStore,
       requiresBilling: isDevelopmentStore === false,
@@ -128,7 +137,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const plan = plans.find((item) => item.handle === planHandle);
 
   if (!plan) {
-    return { error: "Unknown plan selected." };
+    throw redirect(`/app/billing?checkout_error=${encodeURIComponent("Unknown plan selected.")}`);
   }
 
   try {
@@ -172,9 +181,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   } catch (error) {
     if (error instanceof Response) throw error;
     console.error("Could not start checkout for plan:", plan.handle, error);
-    return {
-      error: error instanceof Error ? error.message : "Could not start checkout.",
-    };
+    const message = error instanceof Error ? error.message : "Could not start checkout.";
+    throw redirect(`/app/billing?checkout_error=${encodeURIComponent(message)}`);
   }
 };
 
@@ -186,21 +194,14 @@ export default function Billing() {
     billingUpdated,
     isDevelopmentStore,
   } = useLoaderData<typeof loader>();
-  const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
-  const isSubmitting = ["loading", "submitting"].includes(fetcher.state);
+  const navigation = useNavigation();
 
   useEffect(() => {
     if (billingUpdated && activePlan) {
       shopify.toast.show(`Billing plan updated to ${activePlan}`);
     }
   }, [activePlan, billingUpdated, shopify]);
-
-  useEffect(() => {
-    if (fetcher.data && "error" in fetcher.data && fetcher.data.error) {
-      shopify.toast.show(fetcher.data.error, { isError: true });
-    }
-  }, [fetcher.data, shopify]);
 
   const periodEndLabel = currentPeriodEnd
     ? new Date(currentPeriodEnd).toLocaleDateString()
@@ -239,6 +240,9 @@ export default function Billing() {
         >
           {plans.map((plan) => {
             const isCurrentPlan = activePlan === plan.name;
+            const isSubmitting =
+              navigation.state !== "idle" &&
+              navigation.formData?.get("plan") === plan.handle;
             return (
               <div
                 key={plan.name}
@@ -293,17 +297,17 @@ export default function Billing() {
                   ))}
                 </ul>
                 <div style={{ marginTop: "auto" }}>
-                  <fetcher.Form method="post">
+                  <Form method="post">
                     <input type="hidden" name="plan" value={plan.handle} />
                     <s-button
                       type="submit"
                       variant={plan.name === "Pro" ? "primary" : "secondary"}
-                      disabled={isCurrentPlan || isSubmitting}
+                      disabled={isCurrentPlan || navigation.state !== "idle"}
                       {...(isSubmitting ? { loading: true } : {})}
                     >
                       {isCurrentPlan ? "Current plan" : `Choose ${plan.name}`}
                     </s-button>
-                  </fetcher.Form>
+                  </Form>
                 </div>
               </div>
             );
