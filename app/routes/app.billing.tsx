@@ -165,13 +165,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       console.error("Could not look up shop type before creating subscription:", error);
     }
 
-    const appUrl = process.env.SHOPIFY_APP_URL || "";
-    const returnUrl = `${appUrl}/app/billing?plan_handle=${plan.handle}`;
+    const apiKey = process.env.SHOPIFY_API_KEY;
+    if (!apiKey) {
+      throw new Error("SHOPIFY_API_KEY is not configured on the server.");
+    }
+
+    // Return to the embedded app through Shopify Admin after approval. A bare
+    // app-host URL loses Shopify's embedded-app context and can land on a blank
+    // page when Shopify completes the charge confirmation.
+    const storeHandle = session.shop.replace(/\.myshopify\.com$/, "");
+    const returnUrl = new URL(
+      `/store/${storeHandle}/apps/${apiKey}/app/billing`,
+      "https://admin.shopify.com",
+    );
+    returnUrl.searchParams.set("plan_handle", plan.handle);
 
     const confirmationUrl = await createAppSubscription(admin, {
       name: `InstaGallery ${plan.name}`,
       price: plan.priceAmount,
-      returnUrl,
+      returnUrl: returnUrl.toString(),
       test: isDevelopmentStore,
     });
 
