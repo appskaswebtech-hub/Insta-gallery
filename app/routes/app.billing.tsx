@@ -1,13 +1,13 @@
 import { useEffect } from "react";
-import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import {
-  getAppPricingHandle,
-  getActiveShopSubscription,
-  getPartnerBillingConfig,
-} from "../partner-billing.server";
+  cancelAppSubscription,
+  createAppSubscription,
+  getCurrentSubscription,
+} from "../billing.server";
 import { setCachedPlanHandle } from "../plan-limits.server";
 import PageFooter from "../components/PageFooter";
 
@@ -16,9 +16,9 @@ const plans = [
     name: "Free",
     handle: "free",
     price: "$0",
+    priceAmount: "0",
     period: "forever",
     description: "A simple way to get started with your Instagram gallery.",
-    posts: "Up to 5 posts",
     features: [
       "Up to 5 posts",
       "Grid, slider, or list layout",
@@ -33,9 +33,9 @@ const plans = [
     name: "Basic",
     handle: "basic",
     price: "$2.99",
+    priceAmount: "2.99",
     period: "per month",
     description: "More room to show your products and your latest content.",
-    posts: "Up to 25 posts",
     features: [
       "Up to 25 posts",
       "All layout options",
@@ -50,9 +50,9 @@ const plans = [
     name: "Pro",
     handle: "pro",
     price: "$4.99",
+    priceAmount: "4.99",
     period: "per month",
     description: "Show your full media library on your storefront.",
-    posts: "Unlimited posts",
     features: [
       "Unlimited posts",
       "All layout options",
@@ -65,126 +65,115 @@ const plans = [
   },
 ];
 
-function getPlanSelectionUrl(shop: string) {
-  const appHandle = getAppPricingHandle();
-  if (!appHandle) return null;
-
-  const storeHandle = shop.replace(/\.myshopify\.com$/, "");
-  return `https://admin.shopify.com/store/${encodeURIComponent(storeHandle)}/charges/${encodeURIComponent(appHandle)}/pricing_plans`;
+function planNameFromSubscriptionName(name: string) {
+  const match = plans.find((plan) => name.endsWith(plan.name));
+  return match?.name ?? "Free";
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
-  const planSelectionUrl = getPlanSelectionUrl(session.shop);
   const requestUrl = new URL(request.url);
 
-  const config = getPartnerBillingConfig();
-
-  let shopId: string | null = null;
-  let isDevelopmentStore: boolean | null = null;
-  let shopLookupError: unknown = null;
-
+  let isDevelopmentStore = false;
   try {
     const shopResponse = await admin.graphql(`#graphql
       query BillingShopDetails {
         shop {
-          id
           plan { partnerDevelopment }
         }
       }
     `);
     const shopResult = (await shopResponse.json()) as {
-      data?: { shop: { id: string; plan: { partnerDevelopment: boolean } } };
-      errors?: Array<{ message: string }>;
+      data?: { shop: { plan: { partnerDevelopment: boolean } } };
     };
-
-    if (!shopResult.data?.shop.id || shopResult.errors?.length) {
-      throw new Error("Could not look up the current Shopify shop for billing.");
-    }
-
-    shopId = shopResult.data.shop.id;
-    isDevelopmentStore = shopResult.data.shop.plan.partnerDevelopment;
+    isDevelopmentStore = shopResult.data?.shop.plan.partnerDevelopment ?? false;
   } catch (error) {
-    shopLookupError = error;
-    console.error("Billing shop lookup failed:", error);
-  }
-
-  if (!config) {
-    return {
-      activePlan: null,
-      currentPeriodEnd: null,
-      billingConfigured: false,
-      planSelectionUrl,
-      billingError: null,
-      billingUpdated: false,
-      isDevelopmentStore,
-      requiresBilling: isDevelopmentStore === false,
-    };
+    console.error("Could not look up shop type for billing:", error);
   }
 
   try {
-    if (shopLookupError) throw shopLookupError;
-    if (!shopId) throw new Error("Could not look up the current Shopify shop for billing.");
-
-    const subscription = await getActiveShopSubscription(shopId);
-    const activePlan = subscription?.items.some((item) => item.handle === "pro")
-      ? "Pro"
-      : subscription?.items.some((item) => item.handle === "basic")
-        ? "Basic"
-        : "Free";
+    const subscription = await getCurrentSubscription(admin);
+    const activePlan = subscription
+      ? planNameFromSubscriptionName(subscription.name)
+      : "Free";
 
     await setCachedPlanHandle(session.shop, activePlan.toLowerCase());
 
     return {
       activePlan,
-      currentPeriodEnd: subscription?.currentBillingCycle?.endTime ?? null,
-      billingConfigured: true,
-      planSelectionUrl,
+      currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
       billingError: null,
       billingUpdated: requestUrl.searchParams.has("plan_handle"),
       isDevelopmentStore,
       requiresBilling: isDevelopmentStore === false && !subscription,
     };
   } catch (error) {
-    // Shopify's server helpers can throw Response-like objects as well as
-    // Error instances. Preserve their useful status/message rather than
-    // replacing them with a generic message (or rendering [object Object]).
-    const details = error && typeof error === "object"
-      ? error as { message?: unknown; status?: unknown; statusText?: unknown; errors?: unknown }
-      : null;
-    const messages = Array.isArray(details?.errors)
-      ? details.errors
-          .map((item) => item && typeof item === "object" && "message" in item
-            ? String((item as { message: unknown }).message)
-            : String(item))
-          .join("; ")
-      : "";
-    let responseDetails = "";
-    if (error instanceof Response) {
-      try {
-        responseDetails = (await error.clone().text()).slice(0, 500).trim();
-      } catch {
-        // The response body may already be unavailable; status is still useful.
-      }
-    }
-    const billingError = error instanceof Error
-      ? error.message
-      : typeof details?.message === "string"
-        ? details.message
-        : typeof details?.status === "number"
-          ? `Shopify billing request failed (${details.status}${details.statusText ? ` ${String(details.statusText)}` : ""})${responseDetails ? `: ${responseDetails}` : ". Check the server log for details."}`
-          : messages || "Billing lookup failed with an unrecognized Shopify response. Check the server log for details.";
     console.error("Billing subscription lookup failed:", error);
-
     return {
       activePlan: null,
       currentPeriodEnd: null,
-      billingConfigured: true,
-      planSelectionUrl,
-      billingError,
+      billingError:
+        error instanceof Error ? error.message : "Could not verify your plan.",
       billingUpdated: false,
       isDevelopmentStore,
       requiresBilling: isDevelopmentStore === false,
+    };
+  }
+};
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { admin, session, redirect } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const planHandle = String(formData.get("plan") ?? "");
+  const plan = plans.find((item) => item.handle === planHandle);
+
+  if (!plan) {
+    return { error: "Unknown plan selected." };
+  }
+
+  try {
+    if (plan.handle === "free") {
+      const current = await getCurrentSubscription(admin);
+      if (current) {
+        await cancelAppSubscription(admin, current.id);
+      }
+      await setCachedPlanHandle(session.shop, "free");
+      throw redirect(`/app/billing?plan_handle=free`);
+    }
+
+    let isDevelopmentStore = false;
+    try {
+      const shopResponse = await admin.graphql(`#graphql
+        query BillingShopPlan {
+          shop {
+            plan { partnerDevelopment }
+          }
+        }
+      `);
+      const shopResult = (await shopResponse.json()) as {
+        data?: { shop: { plan: { partnerDevelopment: boolean } } };
+      };
+      isDevelopmentStore = shopResult.data?.shop.plan.partnerDevelopment ?? false;
+    } catch (error) {
+      console.error("Could not look up shop type before creating subscription:", error);
+    }
+
+    const appUrl = process.env.SHOPIFY_APP_URL || "";
+    const returnUrl = `${appUrl}/app/billing?plan_handle=${plan.handle}`;
+
+    const confirmationUrl = await createAppSubscription(admin, {
+      name: `InstaGallery ${plan.name}`,
+      price: plan.priceAmount,
+      returnUrl,
+      test: isDevelopmentStore,
+    });
+
+    throw redirect(confirmationUrl, { target: "_top" });
+  } catch (error) {
+    if (error instanceof Response) throw error;
+    console.error("Could not start checkout for plan:", plan.handle, error);
+    return {
+      error: error instanceof Error ? error.message : "Could not start checkout.",
     };
   }
 };
@@ -193,19 +182,25 @@ export default function Billing() {
   const {
     activePlan,
     currentPeriodEnd,
-    billingConfigured,
-    planSelectionUrl,
     billingError,
     billingUpdated,
     isDevelopmentStore,
   } = useLoaderData<typeof loader>();
+  const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
+  const isSubmitting = ["loading", "submitting"].includes(fetcher.state);
 
   useEffect(() => {
     if (billingUpdated && activePlan) {
       shopify.toast.show(`Billing plan updated to ${activePlan}`);
     }
   }, [activePlan, billingUpdated, shopify]);
+
+  useEffect(() => {
+    if (fetcher.data && "error" in fetcher.data && fetcher.data.error) {
+      shopify.toast.show(fetcher.data.error, { isError: true });
+    }
+  }, [fetcher.data, shopify]);
 
   const periodEndLabel = currentPeriodEnd
     ? new Date(currentPeriodEnd).toLocaleDateString()
@@ -221,14 +216,7 @@ export default function Billing() {
           </s-banner>
         </s-section>
       )}
-      {!billingConfigured ? (
-        <s-section>
-          <s-banner heading="Billing setup is required" tone="warning">
-            Shopify App Pricing needs Partner API credentials and plans configured
-            in the Partner Dashboard before merchants can select a plan.
-          </s-banner>
-        </s-section>
-      ) : billingError ? (
+      {billingError ? (
         <s-section>
           <s-banner heading="Could not verify your plan" tone="critical">
             {billingError}
@@ -305,14 +293,17 @@ export default function Billing() {
                   ))}
                 </ul>
                 <div style={{ marginTop: "auto" }}>
-                  <s-button
-                    href={planSelectionUrl ?? undefined}
-                    target="_top"
-                    variant={plan.name === "Pro" ? "primary" : "secondary"}
-                    disabled={isCurrentPlan || !planSelectionUrl}
-                  >
-                    {isCurrentPlan ? "Current plan" : `Choose ${plan.name}`}
-                  </s-button>
+                  <fetcher.Form method="post">
+                    <input type="hidden" name="plan" value={plan.handle} />
+                    <s-button
+                      type="submit"
+                      variant={plan.name === "Pro" ? "primary" : "secondary"}
+                      disabled={isCurrentPlan || isSubmitting}
+                      {...(isSubmitting ? { loading: true } : {})}
+                    >
+                      {isCurrentPlan ? "Current plan" : `Choose ${plan.name}`}
+                    </s-button>
+                  </fetcher.Form>
                 </div>
               </div>
             );
