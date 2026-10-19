@@ -5,6 +5,7 @@ import { getVisibleCustomMedia } from "../custom-media.server";
 import { getFeed } from "../feed.server";
 import { resolveMediaUrl } from "../uploads.server";
 import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "../youtube";
+import { getCachedPlanHandle, getPostLimitForPlan } from "../plan-limits.server";
 
 const DEFAULT_FEED = {
   postsToShow: "own_posts",
@@ -30,11 +31,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return Response.json({ posts: [], feed: DEFAULT_FEED });
   }
 
-  const [customMedia, instagramPosts, feed] = await Promise.all([
+  const [customMedia, instagramPosts, feed, planHandle] = await Promise.all([
     getVisibleCustomMedia(session.shop),
     getInstagramPosts(session.shop),
     getFeed(session.shop),
+    getCachedPlanHandle(session.shop),
   ]);
+  const postLimit = getPostLimitForPlan(planHandle);
 
   const posts = [
     ...customMedia.map((item) => {
@@ -76,7 +79,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         : null,
       pinned: post.pinned,
     })),
-  ].sort((a, b) => Number(b.pinned) - Number(a.pinned));
+  ]
+    .sort((a, b) => Number(b.pinned) - Number(a.pinned))
+    .slice(0, postLimit);
 
   return Response.json({
     posts,

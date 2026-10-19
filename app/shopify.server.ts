@@ -13,9 +13,6 @@ const shopify = shopifyApp({
   apiVersion: ApiVersion.July26,
   scopes: process.env.SCOPES?.split(","),
   appUrl: process.env.SHOPIFY_APP_URL || "",
-  future: {
-    expiringOfflineAccessTokens: true,
-  },
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,

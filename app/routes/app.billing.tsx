@@ -8,6 +8,7 @@ import {
   getActiveShopSubscription,
   getPartnerBillingConfig,
 } from "../partner-billing.server";
+import { setCachedPlanHandle } from "../plan-limits.server";
 import PageFooter from "../components/PageFooter";
 
 const plans = [
@@ -132,6 +133,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         ? "Basic"
         : "Free";
 
+    await setCachedPlanHandle(session.shop, activePlan.toLowerCase());
+
     return {
       activePlan,
       currentPeriodEnd: subscription?.currentBillingCycle?.endTime ?? null,
@@ -212,9 +215,9 @@ export default function Billing() {
     <s-page heading="Billing">
       {isDevelopmentStore && (
         <s-section>
-          <s-banner heading="Plan selection is for live stores" tone="warning">
-            Development stores can use InstaGallery for testing. Choose a plan
-            from a live Shopify store to continue to billing approval.
+          <s-banner heading="You're testing on a development store" tone="info">
+            Plans selected here are free to test and won't charge real money.
+            Regular pricing applies once this store goes live.
           </s-banner>
         </s-section>
       )}
@@ -234,9 +237,7 @@ export default function Billing() {
       ) : (
         <s-section>
           <s-banner heading={`Your current plan: ${activePlan}`} tone="info">
-            {isDevelopmentStore
-              ? "This development store is for testing. Plan selection is available on live stores."
-              : activePlan === "Free"
+            {activePlan === "Free"
               ? "Choose a plan to change how many posts can appear in your storefront gallery."
               : `Your ${activePlan} plan is active${periodEndLabel ? ` until ${periodEndLabel}` : ""}.`}
           </s-banner>
@@ -305,13 +306,10 @@ export default function Billing() {
                 </ul>
                 <div style={{ marginTop: "auto" }}>
                   <s-button
-                    href={isDevelopmentStore ? undefined : planSelectionUrl ?? undefined}
+                    href={planSelectionUrl ?? undefined}
                     target="_top"
                     variant={plan.name === "Pro" ? "primary" : "secondary"}
-                    disabled={isCurrentPlan || (!isDevelopmentStore && !planSelectionUrl)}
-                    onClick={isDevelopmentStore
-                      ? () => shopify.toast.show("Plan selection is available only on live Shopify stores.")
-                      : undefined}
+                    disabled={isCurrentPlan || !planSelectionUrl}
                   >
                     {isCurrentPlan ? "Current plan" : `Choose ${plan.name}`}
                   </s-button>
