@@ -225,10 +225,10 @@ export default function CustomMedia() {
             <div
               style={{
                 position: "relative",
-                border: "2px dashed #4a4d52",
+                border: "2px dashed #818cf8",
                 borderRadius: 12,
                 padding: 4,
-                background: "#f6f6f7",
+                background: "#f5f5ff",
                 overflow: "hidden",
                 animation: isUploading
                   ? "instaMediaPulse 1.2s ease-in-out infinite"
@@ -324,8 +324,8 @@ export default function CustomMedia() {
                       width: 36,
                       height: 36,
                       borderRadius: "50%",
-                      border: "3px solid #d0d2d6",
-                      borderTopColor: "#2e3033",
+                      border: "3px solid #e0e7ff",
+                      borderTopColor: "#4f46e5",
                       animation: "instaMediaSpin 0.8s linear infinite",
                     }}
                   ></div>
@@ -338,8 +338,8 @@ export default function CustomMedia() {
                   to { transform: rotate(360deg); }
                 }
                 @keyframes instaMediaPulse {
-                  0%, 100% { border-color: #4a4d52; }
-                  50% { border-color: #b0b3b8; }
+                  0%, 100% { border-color: #818cf8; }
+                  50% { border-color: #c7d2fe; }
                 }
               `}</style>
             </div>

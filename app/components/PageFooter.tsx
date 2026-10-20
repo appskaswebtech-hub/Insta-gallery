@@ -5,7 +5,7 @@ export default function PageFooter() {
         textAlign: "center",
         padding: "28px 0 8px 0",
         marginTop: 8,
-        borderTop: "1px solid #ededee",
+        borderTop: "1px solid #e0e7ff",
       }}
     >
       <div style={{ paddingTop: 16 }}>
