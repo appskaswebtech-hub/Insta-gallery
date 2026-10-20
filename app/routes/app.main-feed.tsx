@@ -19,6 +19,8 @@ import {
 } from "../instagram.server";
 import { getFeed, saveFeed, type FeedInput } from "../feed.server";
 import PageFooter from "../components/PageFooter";
+import IconBadge from "../components/IconBadge";
+import MediaTile from "../components/MediaTile";
 
 const DEFAULT_FEED: FeedInput = {
   postsToShow: "own_posts",
@@ -192,7 +194,21 @@ export default function Index() {
 
   return (
     <s-page heading="InstaGallery">
-      <s-section heading="Instagram connection">
+      <s-section>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
+          <IconBadge size="small">
+            <rect x="3" y="3" width="18" height="18" rx="5"></rect>
+            <circle cx="12" cy="12" r="4"></circle>
+            <circle cx="17.2" cy="6.8" r="0.6" fill="#fff" stroke="none"></circle>
+          </IconBadge>
+          <s-stack direction="block" gap="small-200">
+            <s-heading>Instagram connection</s-heading>
+            <s-text color="subdued">
+              Sync posts and reels from your Instagram account into your
+              storefront gallery.
+            </s-text>
+          </s-stack>
+        </div>
         {instagram.connected ? (
           <s-stack direction="block" gap="base">
             <s-stack direction="inline" gap="small" alignItems="center">
@@ -235,7 +251,21 @@ export default function Index() {
       </s-section>
 
       {(
-        <s-section heading="Feed content">
+        <s-section>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
+            <IconBadge size="small">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
+              <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+            </IconBadge>
+            <s-stack direction="block" gap="small-200">
+              <s-heading>Feed content</s-heading>
+              <s-text color="subdued">
+                Choose how your gallery looks and behaves on your storefront.
+              </s-text>
+            </s-stack>
+          </div>
           <form
             id="feed-form"
             onSubmit={(event) => {
@@ -398,6 +428,11 @@ export default function Index() {
 
       {posts.length > 0 && (
         <s-section heading={`Synced posts (${posts.length})`}>
+          <s-text color="subdued">
+            Drag a tile to reorder. Pinned posts always show first on your
+            storefront; hidden posts stay here but won't be shown.
+          </s-text>
+          <div style={{ height: 16 }}></div>
           <s-grid gridTemplateColumns="repeat(auto-fill, 130px)" gap="base">
             {orderedPosts.map((post) => {
               const mediaIcon =
@@ -408,15 +443,13 @@ export default function Index() {
                     : "image";
 
               return (
-                <div
+                <MediaTile
                   key={post.id}
                   draggable
                   onDragStart={handleDragStart(post.id)}
                   onDragOver={handleDragOver}
                   onDrop={handleDrop(post.id)}
-                  style={{ cursor: "grab" }}
                 >
-                <s-stack direction="block" gap="small-100">
                   <s-stack direction="inline" gap="small-100">
                     <s-icon type="drag-handle" size="small"></s-icon>
                     {post.pinned && <s-badge tone="success">Pinned</s-badge>}
@@ -432,8 +465,8 @@ export default function Index() {
                       src={post.thumbnailUrl ?? post.mediaUrl}
                       alt={post.caption ?? ""}
                       style={{
-                        width: 130,
-                        height: 130,
+                        width: "100%",
+                        aspectRatio: "1 / 1",
                         objectFit: "cover",
                         borderRadius: 8,
                         display: "block",
@@ -487,8 +520,7 @@ export default function Index() {
                       onClick={() => togglePostHide(post.id, post.hidden)}
                     ></s-button>
                   </s-stack>
-                </s-stack>
-                </div>
+                </MediaTile>
               );
             })}
           </s-grid>

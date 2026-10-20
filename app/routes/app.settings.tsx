@@ -6,6 +6,7 @@ import { authenticate } from "../shopify.server";
 import { requireActivePlanForLiveStore } from "../billing-access.server";
 import { getFeed, saveFeedDesignSettings } from "../feed.server";
 import PageFooter from "../components/PageFooter";
+import IconBadge from "../components/IconBadge";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -61,33 +62,7 @@ function SettingRow({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              background:
-                "linear-gradient(135deg, #6b6f76, #4a4d52 55%, #2e3033)",
-              boxShadow: "0 3px 10px rgba(0, 0, 0, 0.25)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="26"
-              height="26"
-              fill="none"
-              stroke="#fff"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d={iconPath}></path>
-            </svg>
-          </div>
+          <IconBadge path={iconPath} size="large" />
           <s-stack direction="block" gap="small-200">
             <s-heading>{heading}</s-heading>
             <s-text type="strong">{label}</s-text>

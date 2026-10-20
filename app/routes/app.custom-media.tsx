@@ -15,6 +15,8 @@ import {
 import { saveUploadedFile, resolveMediaUrl } from "../uploads.server";
 import { getYouTubeThumbnailUrl } from "../youtube";
 import PageFooter from "../components/PageFooter";
+import IconBadge from "../components/IconBadge";
+import MediaTile from "../components/MediaTile";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
@@ -191,33 +193,10 @@ export default function CustomMedia() {
     <s-page heading="Custom media">
       <s-section>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: "linear-gradient(135deg, #6b6f76, #4a4d52 55%, #2e3033)",
-              boxShadow: "0 3px 10px rgba(0, 0, 0, 0.25)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="#fff"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 16V4M12 4l-4 4M12 4l4 4"></path>
-              <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path>
-            </svg>
-          </div>
+          <IconBadge
+            path={["M12 16V4M12 4l-4 4M12 4l4 4", "M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"]}
+            size="small"
+          />
           <s-stack direction="block" gap="small-200">
             <s-heading>Upload from your computer</s-heading>
             <s-text color="subdued">
@@ -387,34 +366,11 @@ export default function CustomMedia() {
             marginBottom: 20,
           }}
         >
-          <div
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: "linear-gradient(135deg, #6b6f76, #4a4d52 55%, #2e3033)",
-              boxShadow: "0 3px 10px rgba(0, 0, 0, 0.25)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="#fff"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="4" width="18" height="16" rx="2"></rect>
-              <circle cx="8.5" cy="9.5" r="1.5"></circle>
-              <path d="M21 15l-5-5-9 9"></path>
-            </svg>
-          </div>
+          <IconBadge size="small">
+            <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+            <circle cx="8.5" cy="9.5" r="1.5"></circle>
+            <path d="M21 15l-5-5-9 9"></path>
+          </IconBadge>
           <s-stack direction="block" gap="small-200">
             <s-heading>Upload from URL</s-heading>
             <s-text color="subdued">
@@ -460,18 +416,24 @@ export default function CustomMedia() {
 
       {media.length > 0 && (
         <s-section heading={`Your custom media (${media.length})`}>
+          <s-text color="subdued">
+            Drag a tile to reorder. Pinned items always show first on your
+            storefront; hidden items stay here but won't be shown.
+          </s-text>
+          <div style={{ height: 16 }}></div>
           <s-grid gridTemplateColumns="repeat(auto-fill, 150px)" gap="base">
-            {orderedMedia.map((item) => (
-              <div
-                key={item.id}
-                draggable
-                onDragStart={handleDragStart(item.id)}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop(item.id)}
-                style={{ cursor: "grab" }}
-              >
-              <s-stack direction="block" gap="small-100">
-                <s-stack direction="block" gap="small-200">
+            {orderedMedia.map((item) => {
+              const thumbnailSrc = item.youtubeThumbnailUrl ?? item.url;
+              const isVideoFile = !item.youtubeThumbnailUrl && item.mediaType === "video";
+
+              return (
+                <MediaTile
+                  key={item.id}
+                  draggable
+                  onDragStart={handleDragStart(item.id)}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop(item.id)}
+                >
                   <s-stack direction="inline" gap="small-100">
                     <s-icon type="drag-handle" size="small"></s-icon>
                     <s-badge>
@@ -480,70 +442,59 @@ export default function CustomMedia() {
                     {item.pinned && <s-badge tone="success">Pinned</s-badge>}
                     {item.hidden && <s-badge tone="critical">Hidden</s-badge>}
                   </s-stack>
+
                   <div style={{ opacity: item.hidden ? 0.45 : 1 }}>
-                    {item.youtubeThumbnailUrl ? (
-                      <img
-                        src={item.youtubeThumbnailUrl}
-                        alt=""
-                        style={{
-                          width: "150px",
-                          height: "150px",
-                          objectFit: "cover",
-                          borderRadius: "8px",
-                        }}
-                      />
-                    ) : item.mediaType === "video" ? (
+                    {isVideoFile ? (
                       <video
-                        src={item.url}
+                        src={thumbnailSrc}
                         style={{
-                          width: "150px",
-                          height: "150px",
+                          width: "100%",
+                          aspectRatio: "1 / 1",
                           objectFit: "cover",
-                          borderRadius: "8px",
+                          borderRadius: 8,
+                          display: "block",
                         }}
                         muted
                       />
                     ) : (
                       <img
-                        src={item.url}
+                        src={thumbnailSrc}
                         alt=""
                         style={{
-                          width: "150px",
-                          height: "150px",
+                          width: "100%",
+                          aspectRatio: "1 / 1",
                           objectFit: "cover",
-                          borderRadius: "8px",
+                          borderRadius: 8,
+                          display: "block",
                         }}
                       />
                     )}
                   </div>
-                </s-stack>
 
-                <s-stack direction="inline" gap="small-100">
-                  <s-button
-                    variant="tertiary"
-                    icon={item.pinned ? "star-filled" : "star"}
-                    accessibilityLabel={item.pinned ? "Unpin" : "Pin"}
-                    onClick={() => togglePin(item.id, item.pinned)}
-                  ></s-button>
-                  <s-button
-                    variant="tertiary"
-                    icon={item.hidden ? "eye-check-mark" : "eye-first"}
-                    accessibilityLabel={item.hidden ? "Unhide" : "Hide"}
-                    onClick={() => toggleHide(item.id, item.hidden)}
-                  ></s-button>
-                </s-stack>
-
-                <s-button
-                  variant="tertiary"
-                  tone="critical"
-                  icon="delete"
-                  onClick={() => deleteMedia(item.id)}
-                >
-                  Remove
-                </s-button>
-              </s-stack>
-              </div>
-            ))}
+                  <s-stack direction="inline" gap="small-100">
+                    <s-button
+                      variant="tertiary"
+                      icon={item.pinned ? "star-filled" : "star"}
+                      accessibilityLabel={item.pinned ? "Unpin" : "Pin"}
+                      onClick={() => togglePin(item.id, item.pinned)}
+                    ></s-button>
+                    <s-button
+                      variant="tertiary"
+                      icon={item.hidden ? "eye-check-mark" : "eye-first"}
+                      accessibilityLabel={item.hidden ? "Unhide" : "Hide"}
+                      onClick={() => toggleHide(item.id, item.hidden)}
+                    ></s-button>
+                    <s-button
+                      variant="tertiary"
+                      tone="critical"
+                      icon="delete"
+                      accessibilityLabel="Remove"
+                      onClick={() => deleteMedia(item.id)}
+                    ></s-button>
+                  </s-stack>
+                </MediaTile>
+              );
+            })}
           </s-grid>
         </s-section>
       )}
