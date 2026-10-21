@@ -221,6 +221,9 @@ export async function syncInstagramPosts(shop: string) {
     throw new Error(`No Instagram account connected for shop ${shop}`);
   }
 
+  const feed = await prisma.feed.findUnique({ where: { shop } });
+  const autoShowNewPosts = feed?.autoShowNewPosts ?? true;
+
   const media = await fetchAllInstagramMedia(account.accessToken);
 
   await Promise.all(
@@ -244,7 +247,7 @@ export async function syncInstagramPosts(shop: string) {
 
       return prisma.instagramPost.upsert({
         where: { shop_igMediaId: { shop, igMediaId: node.id } },
-        create: { shop, igMediaId: node.id, ...data },
+        create: { shop, igMediaId: node.id, hidden: !autoShowNewPosts, ...data },
         update: data,
       });
     }),
@@ -253,6 +256,13 @@ export async function syncInstagramPosts(shop: string) {
   const currentMediaIds = media.map((node) => node.id);
   await prisma.instagramPost.deleteMany({
     where: { shop, igMediaId: { notIn: currentMediaIds } },
+  });
+
+  // Bump updatedAt so the admin can show a "last synced" time, without
+  // adding a dedicated column for it.
+  await prisma.instagramAccount.update({
+    where: { shop },
+    data: { accessToken: account.accessToken },
   });
 
   return media.length;

@@ -23,6 +23,22 @@ import PageFooter from "../components/PageFooter";
 import IconBadge from "../components/IconBadge";
 import MediaTile from "../components/MediaTile";
 
+function relativeTime(iso: string) {
+  const diffSeconds = (new Date(iso).getTime() - Date.now()) / 1000;
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+  ];
+  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  for (const [unit, seconds] of units) {
+    if (Math.abs(diffSeconds) >= seconds) {
+      return rtf.format(Math.round(diffSeconds / seconds), unit);
+    }
+  }
+  return rtf.format(0, "minute");
+}
+
 const DEFAULT_FEED: FeedInput = {
   postsToShow: "own_posts",
   layout: "grid",
@@ -51,7 +67,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     shop: session.shop,
     instagram: instagramAccount
-      ? { connected: true as const, username: instagramAccount.username }
+      ? {
+          connected: true as const,
+          username: instagramAccount.username,
+          lastSyncedAt: instagramAccount.updatedAt.toISOString(),
+          needsReconnect: instagramAccount.tokenExpiresAt < new Date(),
+        }
       : { connected: false as const },
     posts,
     feed: feed ?? DEFAULT_FEED,
@@ -240,23 +261,42 @@ export default function Index() {
         {instagram.connected ? (
           <s-stack direction="block" gap="base">
             <s-stack direction="inline" gap="small" alignItems="center">
-              <s-badge tone="success" icon="check-circle">
+              <s-badge tone={instagram.needsReconnect ? "warning" : "success"} icon="check-circle">
                 Connected
               </s-badge>
               <s-text>@{instagram.username}</s-text>
+              <s-text color="subdued">
+                - synced {relativeTime(instagram.lastSyncedAt)}
+              </s-text>
             </s-stack>
+            {instagram.needsReconnect && (
+              <s-banner heading="Reconnect needed" tone="warning">
+                Your Instagram access has expired. Reconnect your account to
+                keep syncing new posts.
+              </s-banner>
+            )}
             <s-paragraph>
               Sync pulls in your latest posts and reels so they're ready to
               display on your storefront.
             </s-paragraph>
-            <s-button
-              onClick={syncPosts}
-              icon="refresh"
-              accessibilityLabel="Sync posts"
-              {...(isSubmitting ? { loading: true } : {})}
-            >
-              Sync posts
-            </s-button>
+            {instagram.needsReconnect ? (
+              <s-button
+                href={`/instagram/connect?shop=${encodeURIComponent(shop)}`}
+                target="_top"
+                icon="connect"
+              >
+                Reconnect Instagram
+              </s-button>
+            ) : (
+              <s-button
+                onClick={syncPosts}
+                icon="refresh"
+                accessibilityLabel="Sync posts"
+                {...(isSubmitting ? { loading: true } : {})}
+              >
+                Sync posts
+              </s-button>
+            )}
           </s-stack>
         ) : (
           <s-stack direction="block" gap="base">

@@ -33,6 +33,7 @@ export interface FeedDesignSettingsInput {
   showLoadingAnimation: boolean;
   linkToOriginalPost: boolean;
   showSliderPreviews: boolean;
+  autoShowNewPosts: boolean;
 }
 
 export function saveFeedDesignSettings(

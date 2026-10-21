@@ -18,6 +18,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       showLoadingAnimation: feed?.showLoadingAnimation ?? false,
       linkToOriginalPost: feed?.linkToOriginalPost ?? false,
       showSliderPreviews: feed?.showSliderPreviews ?? false,
+      autoShowNewPosts: feed?.autoShowNewPosts ?? true,
     },
   };
 };
@@ -31,6 +32,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     showLoadingAnimation: formData.get("showLoadingAnimation") === "true",
     linkToOriginalPost: formData.get("linkToOriginalPost") === "true",
     showSliderPreviews: formData.get("showSliderPreviews") === "true",
+    autoShowNewPosts: formData.get("autoShowNewPosts") === "true",
   });
 
   return { saved: true };
@@ -92,6 +94,7 @@ export default function Settings() {
         showLoadingAnimation: String(settings.showLoadingAnimation),
         linkToOriginalPost: String(settings.linkToOriginalPost),
         showSliderPreviews: String(settings.showSliderPreviews),
+        autoShowNewPosts: String(settings.autoShowNewPosts),
         [name]: String(!currentValue),
       },
       { method: "POST" },
@@ -138,6 +141,17 @@ export default function Settings() {
         checked={settings.showSliderPreviews}
         onChange={() =>
           toggle("showSliderPreviews", settings.showSliderPreviews)
+        }
+      />
+
+      <SettingRow
+        iconPath="M12 5v14M5 12h14"
+        heading="New posts"
+        label="Show new Instagram posts automatically after syncing"
+        details="Turn this off to review and approve each newly synced post before it appears on your storefront."
+        checked={settings.autoShowNewPosts}
+        onChange={() =>
+          toggle("autoShowNewPosts", settings.autoShowNewPosts)
         }
       />
 
