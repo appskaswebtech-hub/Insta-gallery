@@ -149,8 +149,11 @@ export function getInstagramAccount(shop: string) {
   return prisma.instagramAccount.findUnique({ where: { shop } });
 }
 
-export function disconnectInstagramAccount(shop: string) {
-  return prisma.instagramAccount.deleteMany({ where: { shop } });
+export async function disconnectInstagramAccount(shop: string) {
+  await prisma.$transaction([
+    prisma.instagramAccount.deleteMany({ where: { shop } }),
+    prisma.instagramPost.deleteMany({ where: { shop } }),
+  ]);
 }
 
 interface InstagramMediaNode {

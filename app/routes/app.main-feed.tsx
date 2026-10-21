@@ -13,6 +13,7 @@ import {
   getInstagramAccount,
   getAllInstagramPosts,
   syncInstagramPosts,
+  disconnectInstagramAccount,
   setInstagramPostPinned,
   setInstagramPostHidden,
   setInstagramPostsHiddenBulk,
@@ -88,6 +89,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "sync") {
     const syncedCount = await syncInstagramPosts(session.shop);
     return { type: "sync" as const, syncedCount };
+  }
+
+  if (intent === "disconnectInstagram") {
+    await disconnectInstagramAccount(session.shop);
+    return { type: "disconnect" as const };
   }
 
   if (intent === "pinPost") {
@@ -231,10 +237,23 @@ export default function Index() {
     if (fetcher.data?.type === "saveFeed") {
       shopify.toast.show("Feed saved");
     }
+    if (fetcher.data?.type === "disconnect") {
+      shopify.toast.show("Instagram account disconnected");
+    }
   }, [fetcher.data, shopify]);
 
   const syncPosts = () =>
     fetcher.submit({ intent: "sync" }, { method: "POST" });
+
+  const disconnectInstagram = () => {
+    if (
+      window.confirm(
+        "Disconnect this Instagram account? Synced posts will be removed, but your custom media stays untouched.",
+      )
+    ) {
+      fetcher.submit({ intent: "disconnectInstagram" }, { method: "POST" });
+    }
+  };
 
   const saveFeedForm = (formData: FormData) => {
     formData.set("intent", "saveFeed");
@@ -279,24 +298,35 @@ export default function Index() {
               Sync pulls in your latest posts and reels so they're ready to
               display on your storefront.
             </s-paragraph>
-            {instagram.needsReconnect ? (
+            <s-stack direction="inline" gap="small">
+              {instagram.needsReconnect ? (
+                <s-button
+                  href={`/instagram/connect?shop=${encodeURIComponent(shop)}`}
+                  target="_top"
+                  icon="connect"
+                >
+                  Reconnect Instagram
+                </s-button>
+              ) : (
+                <s-button
+                  onClick={syncPosts}
+                  icon="refresh"
+                  accessibilityLabel="Sync posts"
+                  {...(isSubmitting ? { loading: true } : {})}
+                >
+                  Sync posts
+                </s-button>
+              )}
               <s-button
-                href={`/instagram/connect?shop=${encodeURIComponent(shop)}`}
-                target="_top"
-                icon="connect"
-              >
-                Reconnect Instagram
-              </s-button>
-            ) : (
-              <s-button
-                onClick={syncPosts}
-                icon="refresh"
-                accessibilityLabel="Sync posts"
+                variant="tertiary"
+                tone="critical"
+                icon="x-circle"
+                onClick={disconnectInstagram}
                 {...(isSubmitting ? { loading: true } : {})}
               >
-                Sync posts
+                Disconnect
               </s-button>
-            )}
+            </s-stack>
           </s-stack>
         ) : (
           <s-stack direction="block" gap="base">
