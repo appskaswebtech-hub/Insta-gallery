@@ -312,14 +312,11 @@ export default function Index() {
   const syncPosts = () =>
     fetcher.submit({ intent: "sync" }, { method: "POST" });
 
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+
   const disconnectInstagram = () => {
-    if (
-      window.confirm(
-        "Disconnect this Instagram account? Synced posts will be removed, but your custom media stays untouched.",
-      )
-    ) {
-      fetcher.submit({ intent: "disconnectInstagram" }, { method: "POST" });
-    }
+    setConfirmingDisconnect(false);
+    fetcher.submit({ intent: "disconnectInstagram" }, { method: "POST" });
   };
 
   const saveFeedForm = (formData: FormData) => {
@@ -365,6 +362,32 @@ export default function Index() {
               Sync pulls in your latest posts and reels so they're ready to
               display on your storefront.
             </s-paragraph>
+
+            {confirmingDisconnect && (
+              <s-banner heading="Disconnect this Instagram account?" tone="critical">
+                <s-paragraph>
+                  Synced posts will be removed, but your custom media stays
+                  untouched. This can't be undone.
+                </s-paragraph>
+                <s-stack direction="inline" gap="small">
+                  <s-button
+                    variant="primary"
+                    tone="critical"
+                    onClick={disconnectInstagram}
+                    {...(isSubmitting ? { loading: true } : {})}
+                  >
+                    Yes, disconnect
+                  </s-button>
+                  <s-button
+                    variant="tertiary"
+                    onClick={() => setConfirmingDisconnect(false)}
+                  >
+                    Cancel
+                  </s-button>
+                </s-stack>
+              </s-banner>
+            )}
+
             <s-stack direction="inline" gap="small">
               {instagram.needsReconnect ? (
                 <s-button
@@ -388,7 +411,7 @@ export default function Index() {
                 variant="tertiary"
                 tone="critical"
                 icon="x-circle"
-                onClick={disconnectInstagram}
+                onClick={() => setConfirmingDisconnect(true)}
                 {...(isSubmitting ? { loading: true } : {})}
               >
                 Disconnect
