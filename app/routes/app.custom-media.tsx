@@ -11,6 +11,7 @@ import {
   reorderCustomMedia,
   setCustomMediaHidden,
   setCustomMediaPinned,
+  updateCustomMediaCaption,
 } from "../custom-media.server";
 import { saveUploadedFile, resolveMediaUrl } from "../uploads.server";
 import { getYouTubeThumbnailUrl } from "../youtube";
@@ -51,16 +52,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "upload") {
-    const file = formData.get("file");
+    const files = formData
+      .getAll("file")
+      .filter((f): f is File => f instanceof File && f.size > 0);
 
-    if (!(file instanceof File) || file.size === 0) {
+    if (files.length === 0) {
       return { error: "Please choose a file" };
     }
 
-    const mediaType = file.type.startsWith("video/") ? "video" : "image";
-    const { url } = await saveUploadedFile(file);
-    await addCustomMedia(session.shop, { mediaType, url });
-    return { added: true };
+    for (const file of files.slice(0, 10)) {
+      const mediaType = file.type.startsWith("video/") ? "video" : "image";
+      const { url } = await saveUploadedFile(file);
+      await addCustomMedia(session.shop, { mediaType, url });
+    }
+    return { added: true, count: files.length };
   }
 
   if (intent === "delete") {
@@ -80,6 +85,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const id = String(formData.get("id"));
     const hidden = formData.get("hidden") === "true";
     await setCustomMediaHidden(session.shop, id, hidden);
+    return { updated: true };
+  }
+
+  if (intent === "caption") {
+    const id = String(formData.get("id"));
+    const caption = String(formData.get("caption") ?? "");
+    await updateCustomMediaCaption(session.shop, id, caption);
     return { updated: true };
   }
 
@@ -105,10 +117,15 @@ export default function CustomMedia() {
   const [selectedFileName, setSelectedFileName] = useState<string | null>(
     null,
   );
+  const [selectedFileCount, setSelectedFileCount] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewIsVideo, setPreviewIsVideo] = useState(false);
   const [orderedMedia, setOrderedMedia] = useState(media);
   const dragIdRef = useRef<string | null>(null);
+  const [editingCaption, setEditingCaption] = useState<{
+    id: string;
+    caption: string;
+  } | null>(null);
 
   useEffect(() => {
     setOrderedMedia(media);
@@ -129,15 +146,25 @@ export default function CustomMedia() {
 
   useEffect(() => {
     if (uploadFetcher.data?.added) {
-      shopify.toast.show("Media uploaded");
+      const count = "count" in uploadFetcher.data ? uploadFetcher.data.count : 1;
+      shopify.toast.show(
+        count && count > 1 ? `${count} files uploaded` : "Media uploaded",
+      );
       uploadFormRef.current?.reset();
       setSelectedFileName(null);
+      setSelectedFileCount(0);
       setPreviewUrl(null);
     }
     if (uploadFetcher.data?.error) {
       shopify.toast.show(uploadFetcher.data.error, { isError: true });
     }
   }, [uploadFetcher.data, shopify]);
+
+  useEffect(() => {
+    if (itemFetcher.data?.updated && itemFetcher.state === "idle") {
+      setEditingCaption(null);
+    }
+  }, [itemFetcher.data, itemFetcher.state]);
 
   const isSubmitting = ["loading", "submitting"].includes(fetcher.state);
   const isUploading = ["loading", "submitting"].includes(uploadFetcher.state);
@@ -156,6 +183,9 @@ export default function CustomMedia() {
       { intent: "hide", id, hidden: String(!hidden) },
       { method: "POST" },
     );
+
+  const saveCaption = (id: string, caption: string) =>
+    itemFetcher.submit({ intent: "caption", id, caption }, { method: "POST" });
 
   const handleDragStart = (id: string) => () => {
     dragIdRef.current = id;
@@ -270,14 +300,19 @@ export default function CustomMedia() {
                         }}
                       />
                     )}
-                    <s-text type="strong">{selectedFileName}</s-text>
-                    <s-text color="subdued">Click to choose a different file</s-text>
+                    <s-text type="strong">
+                      {selectedFileCount > 1
+                        ? `${selectedFileName} + ${selectedFileCount - 1} more`
+                        : selectedFileName}
+                    </s-text>
+                    <s-text color="subdued">Click to choose different files</s-text>
                   </>
                 ) : (
                   <>
-                    <s-text type="strong">Choose an image or video file</s-text>
+                    <s-text type="strong">Choose image or video files</s-text>
                     <s-text color="subdued">
-                      Click to browse from your computer
+                      Click to browse from your computer - you can select
+                      multiple files at once
                     </s-text>
                   </>
                 )}
@@ -285,13 +320,16 @@ export default function CustomMedia() {
                   type="file"
                   name="file"
                   accept="image/*,video/*"
+                  multiple
                   onChange={(event) => {
-                    const file = event.currentTarget.files?.[0] ?? null;
-                    setSelectedFileName(file?.name ?? null);
+                    const files = Array.from(event.currentTarget.files ?? []);
+                    const firstFile = files[0] ?? null;
+                    setSelectedFileName(firstFile?.name ?? null);
+                    setSelectedFileCount(files.length);
                     if (previewUrl) URL.revokeObjectURL(previewUrl);
-                    if (file) {
-                      setPreviewUrl(URL.createObjectURL(file));
-                      setPreviewIsVideo(file.type.startsWith("video/"));
+                    if (firstFile) {
+                      setPreviewUrl(URL.createObjectURL(firstFile));
+                      setPreviewIsVideo(firstFile.type.startsWith("video/"));
                     } else {
                       setPreviewUrl(null);
                     }
@@ -329,7 +367,11 @@ export default function CustomMedia() {
                       animation: "instaMediaSpin 0.8s linear infinite",
                     }}
                   ></div>
-                  <s-text type="strong">Uploading...</s-text>
+                  <s-text type="strong">
+                    {selectedFileCount > 1
+                      ? `Uploading ${selectedFileCount} files...`
+                      : "Uploading..."}
+                  </s-text>
                 </div>
               )}
 
@@ -471,6 +513,41 @@ export default function CustomMedia() {
                     )}
                   </div>
 
+                  {editingCaption?.id === item.id ? (
+                    <s-stack direction="block" gap="small-100">
+                      <s-text-field
+                        label="Caption"
+                        labelAccessibilityVisibility="exclusive"
+                        value={editingCaption.caption}
+                        placeholder="Add a caption"
+                        onChange={(event) =>
+                          setEditingCaption({
+                            id: item.id,
+                            caption: event.currentTarget.value,
+                          })
+                        }
+                      ></s-text-field>
+                      <s-stack direction="inline" gap="small-100">
+                        <s-button
+                          variant="primary"
+                          onClick={() => saveCaption(item.id, editingCaption.caption)}
+                        >
+                          Save
+                        </s-button>
+                        <s-button
+                          variant="tertiary"
+                          onClick={() => setEditingCaption(null)}
+                        >
+                          Cancel
+                        </s-button>
+                      </s-stack>
+                    </s-stack>
+                  ) : (
+                    item.caption && (
+                      <s-text color="subdued">{item.caption}</s-text>
+                    )
+                  )}
+
                   <s-stack direction="inline" gap="small-100">
                     <s-button
                       variant="tertiary"
@@ -483,6 +560,14 @@ export default function CustomMedia() {
                       icon={item.hidden ? "eye-check-mark" : "eye-first"}
                       accessibilityLabel={item.hidden ? "Unhide" : "Hide"}
                       onClick={() => toggleHide(item.id, item.hidden)}
+                    ></s-button>
+                    <s-button
+                      variant="tertiary"
+                      icon="edit"
+                      accessibilityLabel="Edit caption"
+                      onClick={() =>
+                        setEditingCaption({ id: item.id, caption: item.caption ?? "" })
+                      }
                     ></s-button>
                     <s-button
                       variant="tertiary"
