@@ -15,6 +15,7 @@ import {
   syncInstagramPosts,
   setInstagramPostPinned,
   setInstagramPostHidden,
+  setInstagramPostsHiddenBulk,
   reorderInstagramPosts,
 } from "../instagram.server";
 import { getFeed, saveFeed, type FeedInput } from "../feed.server";
@@ -82,6 +83,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { type: "updated" as const };
   }
 
+  if (intent === "bulkHidePosts") {
+    const ids = String(formData.get("ids") ?? "")
+      .split(",")
+      .filter(Boolean);
+    const hidden = formData.get("hidden") === "true";
+    await setInstagramPostsHiddenBulk(session.shop, ids, hidden);
+    return { type: "updated" as const };
+  }
+
   if (intent === "reorderPosts") {
     const order = String(formData.get("order") ?? "")
       .split(",")
@@ -135,10 +145,28 @@ export default function Index() {
 
   const [orderedPosts, setOrderedPosts] = useState(posts);
   const dragIdRef = useRef<string | null>(null);
+  const [postFilter, setPostFilter] = useState<"all" | "shown" | "hidden">("all");
+  const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     setOrderedPosts(posts);
   }, [posts]);
+
+  const togglePostSelected = (id: string) =>
+    setSelectedPostIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const applyBulkHide = (hidden: boolean) => {
+    postFetcher.submit(
+      { intent: "bulkHidePosts", ids: [...selectedPostIds].join(","), hidden: String(hidden) },
+      { method: "POST" },
+    );
+    setSelectedPostIds(new Set());
+  };
 
   const handleDragStart = (id: string) => () => {
     dragIdRef.current = id;
@@ -433,8 +461,53 @@ export default function Index() {
             storefront; hidden posts stay here but won't be shown.
           </s-text>
           <div style={{ height: 16 }}></div>
+
+          <s-stack direction="inline" gap="small" alignItems="center">
+            {([
+              ["all", `All (${posts.length})`],
+              ["shown", `Shown (${posts.filter((p) => !p.hidden).length})`],
+              ["hidden", `Hidden (${posts.filter((p) => p.hidden).length})`],
+            ] as const).map(([value, label]) => (
+              <s-button
+                key={value}
+                variant={postFilter === value ? "primary" : "tertiary"}
+                onClick={() => setPostFilter(value)}
+              >
+                {label}
+              </s-button>
+            ))}
+          </s-stack>
+
+          <div style={{ height: 12 }}></div>
+
+          {selectedPostIds.size > 0 && (
+            <>
+              <s-stack direction="inline" gap="small" alignItems="center">
+                <s-text color="subdued">{selectedPostIds.size} selected</s-text>
+                <s-button variant="tertiary" onClick={() => applyBulkHide(false)}>
+                  Show selected
+                </s-button>
+                <s-button variant="tertiary" onClick={() => applyBulkHide(true)}>
+                  Hide selected
+                </s-button>
+                <s-button variant="tertiary" onClick={() => setSelectedPostIds(new Set())}>
+                  Clear selection
+                </s-button>
+              </s-stack>
+              <div style={{ height: 12 }}></div>
+            </>
+          )}
+
           <s-grid gridTemplateColumns="repeat(auto-fill, 130px)" gap="base">
-            {orderedPosts.map((post) => {
+            {orderedPosts
+              .filter((post) =>
+                postFilter === "shown"
+                  ? !post.hidden
+                  : postFilter === "hidden"
+                    ? post.hidden
+                    : true,
+              )
+              .map((post) => {
               const mediaIcon =
                 post.mediaType === "VIDEO"
                   ? "video"
@@ -450,7 +523,13 @@ export default function Index() {
                   onDragOver={handleDragOver}
                   onDrop={handleDrop(post.id)}
                 >
-                  <s-stack direction="inline" gap="small-100">
+                  <s-stack direction="inline" gap="small-100" alignItems="center">
+                    <input
+                      type="checkbox"
+                      checked={selectedPostIds.has(post.id)}
+                      onChange={() => togglePostSelected(post.id)}
+                      style={{ cursor: "pointer" }}
+                    />
                     <s-icon type="drag-handle" size="small"></s-icon>
                     {post.pinned && <s-badge tone="success">Pinned</s-badge>}
                     {post.hidden && <s-badge tone="critical">Hidden</s-badge>}
