@@ -216,6 +216,85 @@
     background: none;
     border: none;
   }
+  .instafeed-product-badge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    cursor: pointer;
+    z-index: 2;
+  }
+  .instafeed-product-panel {
+    position: absolute;
+    bottom: 44px;
+    left: 8px;
+    right: 8px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.2);
+    padding: 10px;
+    z-index: 3;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .instafeed-product-panel.instafeed-hidden {
+    display: none;
+  }
+  .instafeed-product-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid #eee;
+  }
+  .instafeed-product-card:last-child {
+    border-bottom: none;
+  }
+  .instafeed-product-card img {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+    aspect-ratio: auto;
+    cursor: default;
+  }
+  .instafeed-product-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .instafeed-product-info p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .instafeed-product-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .instafeed-product-actions a,
+  .instafeed-product-actions button {
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid #222;
+    background: #fff;
+    color: #222;
+  }
+  .instafeed-product-actions button.instafeed-add-to-cart {
+    background: #222;
+    color: #fff;
+  }
 </style>
 
 <script>
@@ -227,6 +306,103 @@
 
     function aspectRatioCss(value) {
       return (value || '3:4').replace(':', ' / ');
+    }
+
+    function addToCart(variantId, button) {
+      var originalText = button.textContent;
+      button.textContent = 'Adding...';
+      button.disabled = true;
+      fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }] }),
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Add to cart failed');
+          button.textContent = 'Added!';
+          setTimeout(function () {
+            button.textContent = originalText;
+            button.disabled = false;
+          }, 1500);
+        })
+        .catch(function () {
+          button.textContent = 'Error';
+          setTimeout(function () {
+            button.textContent = originalText;
+            button.disabled = false;
+          }, 1500);
+        });
+    }
+
+    function buildProductCard(product) {
+      var card = document.createElement('div');
+      card.className = 'instafeed-product-card';
+
+      if (product.imageUrl) {
+        var img = document.createElement('img');
+        img.src = product.imageUrl;
+        img.alt = product.title;
+        card.appendChild(img);
+      }
+
+      var info = document.createElement('div');
+      info.className = 'instafeed-product-info';
+      var title = document.createElement('p');
+      title.textContent = product.title;
+      title.style.fontWeight = '600';
+      var price = document.createElement('p');
+      price.textContent = product.currencyCode + ' ' + product.price;
+      info.appendChild(title);
+      info.appendChild(price);
+      card.appendChild(info);
+
+      var actions = document.createElement('div');
+      actions.className = 'instafeed-product-actions';
+
+      var shopNow = document.createElement('a');
+      shopNow.href = '/products/' + product.handle;
+      shopNow.textContent = 'Shop now';
+      actions.appendChild(shopNow);
+
+      var addBtn = document.createElement('button');
+      addBtn.className = 'instafeed-add-to-cart';
+      addBtn.textContent = 'Add to cart';
+      addBtn.onclick = function (event) {
+        event.stopPropagation();
+        addToCart(product.variantId, addBtn);
+      };
+      actions.appendChild(addBtn);
+
+      card.appendChild(actions);
+      return card;
+    }
+
+    function buildProductBadge(products) {
+      var wrap = document.createElement('div');
+
+      var badge = document.createElement('div');
+      badge.className = 'instafeed-product-badge';
+      badge.setAttribute('aria-label', 'View tagged products');
+      badge.innerHTML =
+        '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#222" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4"></path><path d="M3 6h18"></path><path d="M16 10a4 4 0 0 1-8 0"></path></svg>';
+
+      var panel = document.createElement('div');
+      panel.className = 'instafeed-product-panel instafeed-hidden';
+      products.forEach(function (product) {
+        panel.appendChild(buildProductCard(product));
+      });
+
+      badge.onclick = function (event) {
+        event.stopPropagation();
+        panel.classList.toggle('instafeed-hidden');
+      };
+      panel.onclick = function (event) {
+        event.stopPropagation();
+      };
+
+      wrap.appendChild(badge);
+      wrap.appendChild(panel);
+      return wrap;
     }
 
     function createMediaEl(mediaType, url) {
@@ -344,6 +520,14 @@
         content.appendChild(caption);
       }
 
+      if (post.products && post.products.length) {
+        var productList = document.createElement('div');
+        post.products.forEach(function (product) {
+          productList.appendChild(buildProductCard(product));
+        });
+        content.appendChild(productList);
+      }
+
       var link = document.createElement('a');
       link.href = post.permalink;
       link.target = '_blank';
@@ -434,6 +618,10 @@
         caption.className = 'instafeed-list-caption';
         caption.textContent = post.caption;
         wrapper.appendChild(caption);
+      }
+
+      if (post.products && post.products.length) {
+        wrapper.appendChild(buildProductBadge(post.products));
       }
 
       return wrapper;

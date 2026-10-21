@@ -15,20 +15,43 @@ import {
 } from "../custom-media.server";
 import { saveUploadedFile, resolveMediaUrl } from "../uploads.server";
 import { getYouTubeThumbnailUrl } from "../youtube";
+import { getCachedPlanHandle } from "../plan-limits.server";
+import {
+  addProductTag,
+  canUseProductTagging,
+  getProductTagsForPosts,
+  removeProductTag,
+  type ProductSearchResult,
+} from "../product-tags.server";
 import PageFooter from "../components/PageFooter";
 import IconBadge from "../components/IconBadge";
 import MediaTile from "../components/MediaTile";
+import ProductTagger from "../components/ProductTagger";
+
+function customMediaPostKey(id: string) {
+  return `custom-${id}`;
+}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   await requireActivePlanForLiveStore(admin, request);
   const media = await getCustomMedia(session.shop);
+  const planHandle = await getCachedPlanHandle(session.shop);
+  const canTagProducts = canUseProductTagging(planHandle);
+
+  const tagsByPostKey = await getProductTagsForPosts(
+    session.shop,
+    media.map((item) => customMediaPostKey(item.id)),
+  );
+
   return {
+    canTagProducts,
     media: media.map((item) => ({
       ...item,
       url: resolveMediaUrl(item.url),
       youtubeThumbnailUrl:
         item.mediaType === "video" ? getYouTubeThumbnailUrl(item.url) : null,
+      productTags: tagsByPostKey.get(customMediaPostKey(item.id)) ?? [],
     })),
   };
 };
@@ -103,11 +126,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { updated: true };
   }
 
+  if (intent === "tagProduct") {
+    const planHandle = await getCachedPlanHandle(session.shop);
+    if (!canUseProductTagging(planHandle)) {
+      return { error: "Product tagging requires the Basic or Pro plan" };
+    }
+
+    const id = String(formData.get("id"));
+    await addProductTag(session.shop, customMediaPostKey(id), {
+      id: String(formData.get("productId")),
+      handle: String(formData.get("productHandle")),
+      title: String(formData.get("productTitle")),
+      price: String(formData.get("productPrice")),
+      currencyCode: String(formData.get("productCurrencyCode")),
+      imageUrl: formData.get("productImageUrl")
+        ? String(formData.get("productImageUrl"))
+        : null,
+      variantId: String(formData.get("productVariantId")),
+    });
+    return { tagged: true };
+  }
+
+  if (intent === "untagProduct") {
+    const tagId = String(formData.get("tagId"));
+    await removeProductTag(session.shop, tagId);
+    return { tagged: true };
+  }
+
   throw new Response("Unknown intent", { status: 400 });
 };
 
 export default function CustomMedia() {
-  const { media } = useLoaderData<typeof loader>();
+  const { media, canTagProducts } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const uploadFetcher = useFetcher<typeof action>();
   const itemFetcher = useFetcher<typeof action>();
@@ -126,6 +176,7 @@ export default function CustomMedia() {
     id: string;
     caption: string;
   } | null>(null);
+  const [taggingId, setTaggingId] = useState<string | null>(null);
 
   useEffect(() => {
     setOrderedMedia(media);
@@ -186,6 +237,25 @@ export default function CustomMedia() {
 
   const saveCaption = (id: string, caption: string) =>
     itemFetcher.submit({ intent: "caption", id, caption }, { method: "POST" });
+
+  const tagProduct = (id: string, product: ProductSearchResult) =>
+    itemFetcher.submit(
+      {
+        intent: "tagProduct",
+        id,
+        productId: product.id,
+        productHandle: product.handle,
+        productTitle: product.title,
+        productPrice: product.price,
+        productCurrencyCode: product.currencyCode,
+        productImageUrl: product.imageUrl ?? "",
+        productVariantId: product.variantId,
+      },
+      { method: "POST" },
+    );
+
+  const untagProduct = (tagId: string) =>
+    itemFetcher.submit({ intent: "untagProduct", tagId }, { method: "POST" });
 
   const handleDragStart = (id: string) => () => {
     dragIdRef.current = id;
@@ -577,6 +647,17 @@ export default function CustomMedia() {
                       onClick={() => deleteMedia(item.id)}
                     ></s-button>
                   </s-stack>
+
+                  <ProductTagger
+                    tags={item.productTags}
+                    open={taggingId === item.id}
+                    onToggleOpen={() =>
+                      setTaggingId(taggingId === item.id ? null : item.id)
+                    }
+                    onTag={(product) => tagProduct(item.id, product)}
+                    onUntag={untagProduct}
+                    disabled={!canTagProducts}
+                  />
                 </MediaTile>
               );
             })}

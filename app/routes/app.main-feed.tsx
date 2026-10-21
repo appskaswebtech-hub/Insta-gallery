@@ -20,9 +20,18 @@ import {
   reorderInstagramPosts,
 } from "../instagram.server";
 import { getFeed, saveFeed, type FeedInput } from "../feed.server";
+import { getCachedPlanHandle } from "../plan-limits.server";
+import {
+  addProductTag,
+  canUseProductTagging,
+  getProductTagsForPosts,
+  removeProductTag,
+  type ProductSearchResult,
+} from "../product-tags.server";
 import PageFooter from "../components/PageFooter";
 import IconBadge from "../components/IconBadge";
 import MediaTile from "../components/MediaTile";
+import ProductTagger from "../components/ProductTagger";
 
 function relativeTime(iso: string) {
   const diffSeconds = (new Date(iso).getTime() - Date.now()) / 1000;
@@ -64,6 +73,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const instagramAccount = await getInstagramAccount(session.shop);
   const posts = instagramAccount ? await getAllInstagramPosts(session.shop) : [];
   const feed = await getFeed(session.shop);
+  const planHandle = await getCachedPlanHandle(session.shop);
+  const canTagProducts = canUseProductTagging(planHandle);
+
+  const tagsByPostKey = await getProductTagsForPosts(
+    session.shop,
+    posts.map((post) => post.id),
+  );
 
   return {
     shop: session.shop,
@@ -75,8 +91,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           needsReconnect: instagramAccount.tokenExpiresAt < new Date(),
         }
       : { connected: false as const },
-    posts,
+    posts: posts.map((post) => ({
+      ...post,
+      productTags: tagsByPostKey.get(post.id) ?? [],
+    })),
     feed: feed ?? DEFAULT_FEED,
+    canTagProducts,
   };
 };
 
@@ -127,6 +147,33 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { type: "updated" as const };
   }
 
+  if (intent === "tagProduct") {
+    const planHandle = await getCachedPlanHandle(session.shop);
+    if (!canUseProductTagging(planHandle)) {
+      return { type: "error" as const, error: "Product tagging requires the Basic or Pro plan" };
+    }
+
+    const postId = String(formData.get("id"));
+    await addProductTag(session.shop, postId, {
+      id: String(formData.get("productId")),
+      handle: String(formData.get("productHandle")),
+      title: String(formData.get("productTitle")),
+      price: String(formData.get("productPrice")),
+      currencyCode: String(formData.get("productCurrencyCode")),
+      imageUrl: formData.get("productImageUrl")
+        ? String(formData.get("productImageUrl"))
+        : null,
+      variantId: String(formData.get("productVariantId")),
+    });
+    return { type: "updated" as const };
+  }
+
+  if (intent === "untagProduct") {
+    const tagId = String(formData.get("tagId"));
+    await removeProductTag(session.shop, tagId);
+    return { type: "updated" as const };
+  }
+
   if (intent === "saveFeed") {
     const feed = await saveFeed(session.shop, {
       postsToShow: String(formData.get("postsToShow")),
@@ -153,7 +200,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Index() {
   const fetcher = useFetcher<typeof action>();
   const postFetcher = useFetcher<typeof action>();
-  const { shop, instagram, posts, feed } = useLoaderData<typeof loader>();
+  const { shop, instagram, posts, feed, canTagProducts } = useLoaderData<typeof loader>();
 
   const shopify = useAppBridge();
   const isSubmitting = ["loading", "submitting"].includes(fetcher.state);
@@ -170,10 +217,30 @@ export default function Index() {
       { method: "POST" },
     );
 
+  const tagProduct = (id: string, product: ProductSearchResult) =>
+    postFetcher.submit(
+      {
+        intent: "tagProduct",
+        id,
+        productId: product.id,
+        productHandle: product.handle,
+        productTitle: product.title,
+        productPrice: product.price,
+        productCurrencyCode: product.currencyCode,
+        productImageUrl: product.imageUrl ?? "",
+        productVariantId: product.variantId,
+      },
+      { method: "POST" },
+    );
+
+  const untagProduct = (tagId: string) =>
+    postFetcher.submit({ intent: "untagProduct", tagId }, { method: "POST" });
+
   const [orderedPosts, setOrderedPosts] = useState(posts);
   const dragIdRef = useRef<string | null>(null);
   const [postFilter, setPostFilter] = useState<"all" | "shown" | "hidden">("all");
   const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(new Set());
+  const [taggingId, setTaggingId] = useState<string | null>(null);
 
   useEffect(() => {
     setOrderedPosts(posts);
@@ -669,6 +736,17 @@ export default function Index() {
                       onClick={() => togglePostHide(post.id, post.hidden)}
                     ></s-button>
                   </s-stack>
+
+                  <ProductTagger
+                    tags={post.productTags}
+                    open={taggingId === post.id}
+                    onToggleOpen={() =>
+                      setTaggingId(taggingId === post.id ? null : post.id)
+                    }
+                    onTag={(product) => tagProduct(post.id, product)}
+                    onUntag={untagProduct}
+                    disabled={!canTagProducts}
+                  />
                 </MediaTile>
               );
             })}

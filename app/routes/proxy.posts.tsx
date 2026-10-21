@@ -6,6 +6,7 @@ import { getFeed } from "../feed.server";
 import { resolveMediaUrl } from "../uploads.server";
 import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "../youtube";
 import { getCachedPlanHandle, getPostLimitForPlan } from "../plan-limits.server";
+import { canUseProductTagging, getProductTagsForPosts } from "../product-tags.server";
 
 const DEFAULT_FEED = {
   postsToShow: "own_posts",
@@ -83,8 +84,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .sort((a, b) => Number(b.pinned) - Number(a.pinned))
     .slice(0, postLimit);
 
+  const canTagProducts = canUseProductTagging(planHandle);
+  const tagsByPostKey = canTagProducts
+    ? await getProductTagsForPosts(session.shop, posts.map((post) => post.id))
+    : new Map();
+
+  const postsWithProducts = posts.map((post) => ({
+    ...post,
+    products: (tagsByPostKey.get(post.id) ?? []).map((tag: any) => ({
+      id: tag.productId,
+      handle: tag.productHandle,
+      title: tag.title,
+      price: tag.price,
+      currencyCode: tag.currencyCode,
+      imageUrl: tag.imageUrl,
+      variantId: tag.variantId,
+    })),
+  }));
+
   return Response.json({
-    posts,
+    posts: postsWithProducts,
     feed: feed
       ? {
           postsToShow: feed.postsToShow,
