@@ -10,6 +10,8 @@ import {
 } from "../billing.server";
 import { setCachedPlanHandle } from "../plan-limits.server";
 import PageFooter from "../components/PageFooter";
+import styles from "../styles/billing.module.css";
+import billingStyles from "../styles/billing.module.css?inline";
 
 const plans = [
   {
@@ -234,111 +236,213 @@ export default function Billing() {
     ? new Date(currentPeriodEnd).toLocaleDateString()
     : null;
 
-  return (
-    <s-page heading="Billing">
-      {isDevelopmentStore && (
-        <s-section>
-          <s-banner heading="You're testing on a development store" tone="info">
-            Plans selected here are free to test and won't charge real money.
-            Regular pricing applies once this store goes live.
-          </s-banner>
-        </s-section>
-      )}
-      {billingError ? (
-        <s-section>
-          <s-banner heading="Could not verify your plan" tone="critical">
-            {billingError}
-          </s-banner>
-        </s-section>
-      ) : (
-        <s-section>
-          <s-banner heading={`Your current plan: ${activePlan}`} tone="info">
-            {activePlan === "Free"
-              ? "Choose a plan to change how many posts can appear in your storefront gallery."
-              : `Your ${activePlan} plan is active${periodEndLabel ? ` until ${periodEndLabel}` : ""}.`}
-          </s-banner>
-        </s-section>
-      )}
+  const planAccentClass: Record<string, string> = {
+    Free: styles.free,
+    Basic: styles.basic,
+    Pro: styles.pro,
+  };
 
-      <s-section heading="Available plans">
-        <s-grid
-          gridTemplateColumns="repeat(auto-fit, minmax(240px, 1fr))"
-          gap="base"
-        >
+  return (
+    <s-page heading="Billing" inlineSize="large">
+      <style>{billingStyles}</style>
+      <div className={styles.workspace}>
+        <header className={styles.pageHeader}>
+          <div>
+            <h1>Billing &amp; plans</h1>
+            <p>Choose the plan that fits how much of your content you want to show.</p>
+          </div>
+          <div className={styles.pageMark} aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              width="24"
+              height="24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="2" y="5" width="20" height="14" rx="3"></rect>
+              <path d="M2 10h20"></path>
+            </svg>
+          </div>
+        </header>
+
+        {isDevelopmentStore && (
+          <div className={styles.notice}>
+            <div className={styles.noticeIcon} aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 16v-4M12 8h.01"></path>
+              </svg>
+            </div>
+            <div className={styles.noticeCopy}>
+              <h2>You're testing on a development store</h2>
+              <p>
+                Plans selected here are free to test and won't charge real
+                money. Regular pricing applies once this store goes live.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {billingError ? (
+          <div className={`${styles.notice} ${styles.criticalNotice}`}>
+            <div className={styles.noticeIcon} aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 8v4M12 16h.01"></path>
+              </svg>
+            </div>
+            <div className={styles.noticeCopy}>
+              <h2>Could not verify your plan</h2>
+              <p>{billingError}</p>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.planSummary}>
+            <div className={styles.summaryInfo}>
+              <div className={styles.summaryIcon} aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="20"
+                  height="20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="m9 12 2 2 4-4"></path>
+                  <circle cx="12" cy="12" r="10"></circle>
+                </svg>
+              </div>
+              <div>
+                <div className={styles.summaryTitle}>
+                  <span className={styles.summaryLabel}>Current plan</span>
+                  <h2>{activePlan}</h2>
+                  {activePlan !== "Free" && (
+                    <span className={styles.activeBadge}>
+                      <span aria-hidden="true" />
+                      Active
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <p className={styles.summaryDetails}>
+              {activePlan === "Free"
+                ? "Choose a plan to change how many posts can appear in your storefront gallery."
+                : `Your ${activePlan} plan is active${periodEndLabel ? ` until ${periodEndLabel}` : ""}.`}
+            </p>
+          </div>
+        )}
+
+        <div className={styles.sectionHeading}>
+          <h2>Available plans</h2>
+          <p>Switch anytime — changes apply as soon as you confirm.</p>
+        </div>
+
+        <div className={styles.planGrid}>
           {plans.map((plan) => {
             const isCurrentPlan = activePlan === plan.name;
             const isSubmitting = fetcher.state !== "idle";
             return (
               <div
                 key={plan.name}
-                style={{
-                  height: "100%",
-                  boxSizing: "border-box",
-                  padding: 24,
-                  borderRadius: 16,
-                  border: isCurrentPlan
-                    ? "2px solid #30343b"
-                    : "1px solid #d8dadd",
-                  background: "#fff",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 16,
-                }}
+                className={`${styles.planCard} ${planAccentClass[plan.name] ?? ""} ${
+                  isCurrentPlan ? styles.currentPlan : ""
+                }`}
               >
-                <s-stack direction="inline" gap="small" alignItems="center">
-                  <s-heading>{plan.name}</s-heading>
-                  {isCurrentPlan && <s-badge tone="success">Current plan</s-badge>}
-                </s-stack>
-                <div>
-                  <div style={{ fontSize: 28, fontWeight: 650 }}>{plan.price}</div>
-                  <s-text color="subdued">{plan.period}</s-text>
-                </div>
-                <s-text color="subdued">{plan.description}</s-text>
-                <s-divider></s-divider>
-                <ul
-                  style={{
-                    margin: 0,
-                    padding: 0,
-                    listStyle: "none",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  {plan.features.map((feature) => (
-                    <li
-                      key={feature}
-                      style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 8,
-                      }}
+                <div className={styles.cardHeader}>
+                  <div className={styles.planIcon} aria-hidden="true">
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="18"
+                      height="18"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                     >
-                      <span style={{ color: "#2e3033", flexShrink: 0 }}>
-                        ✓
-                      </span>
-                      <s-text>{feature}</s-text>
+                      <path d="m12 2 3 7h7l-5.5 4.5L18.5 21 12 16.8 5.5 21l2-7.5L2 9h7Z"></path>
+                    </svg>
+                  </div>
+                  {isCurrentPlan && (
+                    <span className={styles.currentBadge}>Current plan</span>
+                  )}
+                </div>
+                <div className={styles.planName}>{plan.name}</div>
+                <div className={styles.priceLine}>
+                  <span className={styles.price}>{plan.price}</span>
+                  <span className={styles.period}>{plan.period}</span>
+                </div>
+                <p className={styles.description}>{plan.description}</p>
+                <ul className={styles.features}>
+                  {plan.features.map((feature) => (
+                    <li key={feature}>
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="15"
+                        height="15"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="m5 13 4 4L19 7"></path>
+                      </svg>
+                      <span>{feature}</span>
                     </li>
                   ))}
                 </ul>
-                <div style={{ marginTop: "auto" }}>
+                <div className={styles.planForm}>
                   <fetcher.Form method="post">
                     <input type="hidden" name="plan" value={plan.handle} />
-                    <s-button
+                    <button
                       type="submit"
-                      variant={plan.name === "Pro" ? "primary" : "secondary"}
+                      className={`${styles.chooseButton} ${
+                        isCurrentPlan
+                          ? styles.currentButton
+                          : plan.name === "Pro"
+                            ? styles.primaryButton
+                            : ""
+                      }`}
                       disabled={isCurrentPlan || isSubmitting}
-                      {...(isSubmitting ? { loading: true } : {})}
+                      aria-busy={isSubmitting}
                     >
+                      {isSubmitting && !isCurrentPlan && (
+                        <span className={styles.spinner} aria-hidden="true" />
+                      )}
                       {isCurrentPlan ? "Current plan" : `Choose ${plan.name}`}
-                    </s-button>
+                    </button>
                   </fetcher.Form>
                 </div>
               </div>
             );
           })}
-        </s-grid>
-      </s-section>
+        </div>
+      </div>
 
       <PageFooter />
     </s-page>

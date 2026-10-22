@@ -29,9 +29,9 @@ import {
   type ProductSearchResult,
 } from "../product-tags.server";
 import PageFooter from "../components/PageFooter";
-import IconBadge from "../components/IconBadge";
-import MediaTile from "../components/MediaTile";
 import ProductTagger from "../components/ProductTagger";
+import styles from "../styles/main-feed.module.css";
+import feedStyles from "../styles/main-feed.module.css?inline";
 
 function relativeTime(iso: string) {
   const diffSeconds = (new Date(iso).getTime() - Date.now()) / 1000;
@@ -200,10 +200,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Index() {
   const fetcher = useFetcher<typeof action>();
   const postFetcher = useFetcher<typeof action>();
-  const { shop, instagram, posts, feed, canTagProducts } = useLoaderData<typeof loader>();
+  const { shop, instagram, posts, feed, canTagProducts } =
+    useLoaderData<typeof loader>();
 
   const shopify = useAppBridge();
   const isSubmitting = ["loading", "submitting"].includes(fetcher.state);
+  const isSyncing = isSubmitting && fetcher.formData?.get("intent") === "sync";
+  const isSaving =
+    isSubmitting && fetcher.formData?.get("intent") === "saveFeed";
+  const isDisconnecting =
+    isSubmitting && fetcher.formData?.get("intent") === "disconnectInstagram";
+  const [postShape, setPostShape] = useState(feed.postShape);
+  const [cornerRadius, setCornerRadius] = useState(String(feed.cornerRadius));
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+  const [postFilter, setPostFilter] = useState<"all" | "shown" | "hidden">(
+    "all",
+  );
+  const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [taggingId, setTaggingId] = useState<string | null>(null);
 
   const togglePostPin = (id: string, pinned: boolean) =>
     postFetcher.submit(
@@ -236,16 +252,6 @@ export default function Index() {
   const untagProduct = (tagId: string) =>
     postFetcher.submit({ intent: "untagProduct", tagId }, { method: "POST" });
 
-  const [orderedPosts, setOrderedPosts] = useState(posts);
-  const dragIdRef = useRef<string | null>(null);
-  const [postFilter, setPostFilter] = useState<"all" | "shown" | "hidden">("all");
-  const [selectedPostIds, setSelectedPostIds] = useState<Set<string>>(new Set());
-  const [taggingId, setTaggingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setOrderedPosts(posts);
-  }, [posts]);
-
   const togglePostSelected = (id: string) =>
     setSelectedPostIds((prev) => {
       const next = new Set(prev);
@@ -256,14 +262,29 @@ export default function Index() {
 
   const applyBulkHide = (hidden: boolean) => {
     postFetcher.submit(
-      { intent: "bulkHidePosts", ids: [...selectedPostIds].join(","), hidden: String(hidden) },
+      {
+        intent: "bulkHidePosts",
+        ids: [...selectedPostIds].join(","),
+        hidden: String(hidden),
+      },
       { method: "POST" },
     );
     setSelectedPostIds(new Set());
   };
 
-  const handleDragStart = (id: string) => () => {
+  const [orderedPosts, setOrderedPosts] = useState(() =>
+    [...posts].sort((a, b) => a.position - b.position),
+  );
+  const dragIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setOrderedPosts([...posts].sort((a, b) => a.position - b.position));
+  }, [posts]);
+
+  const handleDragStart = (id: string) => (event: React.DragEvent) => {
     dragIdRef.current = id;
+    event.dataTransfer.setData("text/plain", id);
+    event.dataTransfer.effectAllowed = "move";
   };
 
   const handleDragOver = (event: React.DragEvent) => {
@@ -276,25 +297,18 @@ export default function Index() {
     dragIdRef.current = null;
     if (!draggedId || draggedId === targetId) return;
 
-    setOrderedPosts((prev) => {
-      const next = [...prev];
-      const fromIndex = next.findIndex((item) => item.id === draggedId);
-      const toIndex = next.findIndex((item) => item.id === targetId);
-      if (fromIndex === -1 || toIndex === -1) return prev;
+    const next = [...orderedPosts];
+    const fromIndex = next.findIndex((item) => item.id === draggedId);
+    const toIndex = next.findIndex((item) => item.id === targetId);
+    if (fromIndex === -1 || toIndex === -1) return;
 
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-
-      postFetcher.submit(
-        {
-          intent: "reorderPosts",
-          order: next.map((item) => item.id).join(","),
-        },
-        { method: "POST" },
-      );
-
-      return next;
-    });
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    setOrderedPosts(next);
+    postFetcher.submit(
+      { intent: "reorderPosts", order: next.map((item) => item.id).join(",") },
+      { method: "POST" },
+    );
   };
 
   useEffect(() => {
@@ -312,8 +326,6 @@ export default function Index() {
   const syncPosts = () =>
     fetcher.submit({ intent: "sync" }, { method: "POST" });
 
-  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
-
   const disconnectInstagram = () => {
     setConfirmingDisconnect(false);
     fetcher.submit({ intent: "disconnectInstagram" }, { method: "POST" });
@@ -324,459 +336,626 @@ export default function Index() {
     fetcher.submit(formData, { method: "POST" });
   };
 
+  const visiblePosts = orderedPosts.filter((post) =>
+    postFilter === "shown"
+      ? !post.hidden
+      : postFilter === "hidden"
+        ? post.hidden
+        : true,
+  );
+
   return (
-    <s-page heading="InstaGallery">
-      <s-section>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
-          <IconBadge size="small">
-            <rect x="3" y="3" width="18" height="18" rx="5"></rect>
-            <circle cx="12" cy="12" r="4"></circle>
-            <circle cx="17.2" cy="6.8" r="0.6" fill="#fff" stroke="none"></circle>
-          </IconBadge>
-          <s-stack direction="block" gap="small-200">
-            <s-heading>Instagram connection</s-heading>
-            <s-text color="subdued">
-              Sync posts and reels from your Instagram account into your
-              storefront gallery.
-            </s-text>
-          </s-stack>
+    <s-page heading="Main feed" inlineSize="large">
+      <style>{feedStyles}</style>
+      <div className={styles.workspace}>
+        <div className={styles.pageHeader}>
+          <div>
+            <h1>Your Instagram feed</h1>
+            <p>Choose your layout. Style your posts. Make it yours.</p>
+          </div>
+          <button
+            className={styles.saveButton}
+            type="submit"
+            form="feed-form"
+            disabled={isSubmitting}
+            aria-busy={isSaving}
+          >
+            {isSaving ? (
+              <s-spinner size="base" />
+            ) : (
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 20 20"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+              >
+                <path d="m4 10 4 4 8-8" />
+              </svg>
+            )}
+            {isSaving ? "Saving…" : "Save feed"}
+          </button>
         </div>
-        {instagram.connected ? (
-          <s-stack direction="block" gap="base">
-            <s-stack direction="inline" gap="small" alignItems="center">
-              <s-badge tone={instagram.needsReconnect ? "warning" : "success"} icon="check-circle">
-                Connected
-              </s-badge>
-              <s-text>@{instagram.username}</s-text>
-              <s-text color="subdued">
-                - synced {relativeTime(instagram.lastSyncedAt)}
-              </s-text>
-            </s-stack>
-            {instagram.needsReconnect && (
-              <s-banner heading="Reconnect needed" tone="warning">
-                Your Instagram access has expired. Reconnect your account to
-                keep syncing new posts.
-              </s-banner>
-            )}
-            <s-paragraph>
-              Sync pulls in your latest posts and reels so they're ready to
-              display on your storefront.
-            </s-paragraph>
 
-            {confirmingDisconnect && (
-              <s-banner heading="Disconnect this Instagram account?" tone="critical">
-                <s-paragraph>
-                  Synced posts will be removed, but your custom media stays
-                  untouched. This can't be undone.
-                </s-paragraph>
-                <s-stack direction="inline" gap="small">
+        <section
+          className={styles.connection}
+          aria-label="Instagram connection"
+        >
+          <div className={styles.connectionInfo}>
+            <div className={styles.instagramMark} aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                width="25"
+                height="25"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="5" />
+                <circle cx="12" cy="12" r="4" />
+                <circle
+                  cx="17.5"
+                  cy="6.5"
+                  r="1"
+                  fill="currentColor"
+                  stroke="none"
+                />
+              </svg>
+            </div>
+            <div className={styles.connectionCopy}>
+              <div className={styles.connectionTitle}>
+                <h2>
+                  {instagram.connected
+                    ? `@${instagram.username}`
+                    : "Connect your Instagram"}
+                </h2>
+                <span
+                  className={
+                    instagram.connected ? styles.connected : styles.disconnected
+                  }
+                >
+                  <span aria-hidden="true" />
+                  {instagram.connected ? "Connected" : "Not connected"}
+                </span>
+              </div>
+              <p>
+                {instagram.connected
+                  ? "Sync your latest posts and reels to keep your feed up to date."
+                  : "Connect a Business or Creator account to bring in your posts and reels."}
+              </p>
+              {instagram.connected && (
+                <p className={styles.connectionSyncedAt}>
+                  Synced {relativeTime(instagram.lastSyncedAt)}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className={styles.connectionAction}>
+            {instagram.connected ? (
+              <div className={styles.connectionActions}>
+                {instagram.needsReconnect ? (
                   <s-button
-                    variant="primary"
-                    tone="critical"
-                    onClick={disconnectInstagram}
-                    {...(isSubmitting ? { loading: true } : {})}
+                    href={`/instagram/connect?shop=${encodeURIComponent(shop)}`}
+                    target="_top"
+                    icon="connect"
                   >
-                    Yes, disconnect
+                    Reconnect Instagram
                   </s-button>
+                ) : (
                   <s-button
-                    variant="tertiary"
-                    onClick={() => setConfirmingDisconnect(false)}
+                    onClick={syncPosts}
+                    icon="refresh"
+                    accessibilityLabel="Sync Instagram posts"
+                    disabled={isSubmitting}
+                    {...(isSyncing ? { loading: true } : {})}
                   >
-                    Cancel
+                    Sync posts
                   </s-button>
-                </s-stack>
-              </s-banner>
-            )}
-
-            <s-stack direction="inline" gap="small">
-              {instagram.needsReconnect ? (
+                )}
+                <button
+                  type="button"
+                  className={styles.disconnectLink}
+                  disabled={isSubmitting}
+                  onClick={() => setConfirmingDisconnect(true)}
+                >
+                  Disconnect
+                </button>
+              </div>
+            ) : (
+              <div className="nr-instagram-btn">
                 <s-button
                   href={`/instagram/connect?shop=${encodeURIComponent(shop)}`}
                   target="_top"
+                  variant="primary"
                   icon="connect"
                 >
-                  Reconnect Instagram
+                  Connect Instagram
                 </s-button>
-              ) : (
-                <s-button
-                  onClick={syncPosts}
-                  icon="refresh"
-                  accessibilityLabel="Sync posts"
-                  {...(isSubmitting ? { loading: true } : {})}
-                >
-                  Sync posts
-                </s-button>
-              )}
-              <s-button
-                variant="tertiary"
-                tone="critical"
-                icon="x-circle"
-                onClick={() => setConfirmingDisconnect(true)}
-                {...(isSubmitting ? { loading: true } : {})}
-              >
-                Disconnect
-              </s-button>
-            </s-stack>
-          </s-stack>
-        ) : (
-          <s-stack direction="block" gap="base">
-            <s-badge tone="critical" icon="x-circle">
-              Not connected
-            </s-badge>
-            <s-paragraph>
-              Connect your Instagram Business or Creator account to start
-              pulling in posts and reels for your shoppable feed.
-            </s-paragraph>
-            <s-button
-              href={`/instagram/connect?shop=${encodeURIComponent(shop)}`}
-              target="_top"
-              icon="connect"
-            >
-              Connect Instagram
-            </s-button>
-          </s-stack>
-        )}
-      </s-section>
-
-      {(
-        <s-section>
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
-            <IconBadge size="small">
-              <rect x="3" y="3" width="7" height="7" rx="1.5"></rect>
-              <rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
-              <rect x="3" y="14" width="7" height="7" rx="1.5"></rect>
-              <rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
-            </IconBadge>
-            <s-stack direction="block" gap="small-200">
-              <s-heading>Feed content</s-heading>
-              <s-text color="subdued">
-                Choose how your gallery looks and behaves on your storefront.
-              </s-text>
-            </s-stack>
+              </div>
+            )}
           </div>
+        </section>
+
+        {instagram.connected && instagram.needsReconnect && (
+          <div className={`${styles.inlineBanner} ${styles.warningBanner}`}>
+            <strong>Reconnect needed</strong>
+            <span>
+              Your Instagram access has expired. Reconnect your account to
+              keep syncing new posts.
+            </span>
+          </div>
+        )}
+
+        {confirmingDisconnect && (
+          <div className={`${styles.inlineBanner} ${styles.criticalBanner}`}>
+            <strong>Disconnect this Instagram account?</strong>
+            <span>
+              Synced posts will be removed, but your custom media stays
+              untouched. This can't be undone.
+            </span>
+            <div className={styles.bannerActions}>
+              <button
+                type="button"
+                className={styles.bannerConfirmButton}
+                disabled={isDisconnecting}
+                onClick={disconnectInstagram}
+              >
+                Yes, disconnect
+              </button>
+              <button
+                type="button"
+                className={styles.bannerCancelButton}
+                onClick={() => setConfirmingDisconnect(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className={styles.editor}>
           <form
             id="feed-form"
+            className={styles.settings}
             onSubmit={(event) => {
               event.preventDefault();
               saveFeedForm(new FormData(event.currentTarget));
             }}
           >
-            <s-stack direction="block" gap="large">
-              <s-stack direction="block" gap="base">
-                <s-heading>Layout &amp; display</s-heading>
-                <s-grid gridTemplateColumns="1fr 1fr" gap="base">
-                  <s-select
-                    label="Posts to show"
-                    name="postsToShow"
-                    value={feed.postsToShow}
-                  >
-                    <s-option value="own_posts">Own posts</s-option>
-                    <s-option value="reels">Reels</s-option>
-                  </s-select>
+            <div className={styles.panelHeader}>
+              <div className={styles.headingIcon} aria-hidden="true">
+                <s-icon type="settings" size="small" />
+              </div>
+              <div>
+                <h2>Feed settings</h2>
+                <p>A few details to make it your own.</p>
+              </div>
+            </div>
 
-                  <s-select
-                    label="Layout"
-                    name="layout"
-                    value={feed.layout}
-                  >
-                    <s-option value="grid">Grid</s-option>
-                    <s-option value="slider">Slider</s-option>
-                    <s-option value="list">List</s-option>
-                  </s-select>
+            <section
+              className={styles.settingsSection}
+              aria-labelledby="layout-heading"
+            >
+              <h3 id="layout-heading">Layout &amp; display</h3>
+              <div className={styles.fieldGrid}>
+                <s-select
+                  label="Posts to show"
+                  name="postsToShow"
+                  value={feed.postsToShow}
+                >
+                  <s-option value="own_posts">Own posts</s-option>
+                  <s-option value="reels">Reels</s-option>
+                </s-select>
+                <s-text-field
+                  label="Feed title"
+                  name="title"
+                  defaultValue={feed.title ?? ""}
+                  placeholder="e.g. Our Instagram"
+                />
+                <fieldset
+                  className={`${styles.layoutField} ${styles.fullWidth}`}
+                >
+                  <legend>Layout</legend>
+                  <div className={styles.layoutOptions}>
+                    {(["grid", "slider", "list"] as const).map((layout) => (
+                      <label key={layout} className={styles.layoutOption}>
+                        <input
+                          type="radio"
+                          name="layout"
+                          value={layout}
+                          defaultChecked={feed.layout === layout}
+                        />
+                        <span className={styles.layoutTile}>
+                          <span className={styles[layout]} aria-hidden="true">
+                            {Array.from(
+                              { length: layout === "grid" ? 6 : 3 },
+                              (_, index) => (
+                                <i key={index} />
+                              ),
+                            )}
+                          </span>
+                          <span>
+                            {layout === "grid"
+                              ? "Grid"
+                              : layout === "slider"
+                                ? "Slider"
+                                : "List"}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <s-select
+                  label="Post spacing"
+                  name="postSpacing"
+                  value={feed.postSpacing}
+                >
+                  <s-option value="none">None</s-option>
+                  <s-option value="small">Small</s-option>
+                  <s-option value="medium">Medium</s-option>
+                  <s-option value="large">Large</s-option>
+                </s-select>
+                <s-select
+                  label="Post size"
+                  name="postSize"
+                  value={feed.postSize}
+                >
+                  <s-option value="small">Small</s-option>
+                  <s-option value="medium">Medium</s-option>
+                  <s-option value="large">Large</s-option>
+                  <s-option value="xlarge">Extra large</s-option>
+                </s-select>
+              </div>
+            </section>
 
-                  <s-grid-item gridColumn="span 2">
-                    <s-text-field
-                      label="Feed title"
-                      name="title"
-                      defaultValue={feed.title ?? ""}
-                      placeholder="e.g. Media Gallery (leave empty for no title)"
-                    ></s-text-field>
-                  </s-grid-item>
-
-                  <s-select
-                    label="Post spacing"
-                    name="postSpacing"
-                    value={feed.postSpacing}
-                  >
-                    <s-option value="none">None</s-option>
-                    <s-option value="small">Small</s-option>
-                    <s-option value="medium">Medium</s-option>
-                    <s-option value="large">Large</s-option>
-                  </s-select>
-                </s-grid>
-              </s-stack>
-
-              <s-divider></s-divider>
-
-              <s-stack direction="block" gap="base">
-                <s-heading>Appearance</s-heading>
-                <s-grid gridTemplateColumns="1fr 1fr" gap="base">
-                  <s-select
-                    label="Format"
-                    name="aspectRatio"
-                    value={feed.aspectRatio}
-                  >
-                    <s-option value="1:1">1:1</s-option>
-                    <s-option value="3:4">3:4</s-option>
-                    <s-option value="4:5">4:5</s-option>
-                    <s-option value="9:16">9:16</s-option>
-                    <s-option value="1:2">1:2</s-option>
-                    <s-option value="1:3">1:3</s-option>
-                    <s-option value="1:4">1:4</s-option>
-                  </s-select>
-
-                  <s-select
-                    label="Image fit"
-                    name="postFit"
-                    value={feed.postFit}
-                  >
-                    <s-option value="cover">Cover (crop to fill)</s-option>
-                    <s-option value="contain">Contain (show full image)</s-option>
-                  </s-select>
-
-                  <s-select
-                    label="Shape"
-                    name="postShape"
-                    value={feed.postShape}
-                  >
-                    <s-option value="rectangle">Rectangle</s-option>
-                    <s-option value="circle">Circle</s-option>
-                  </s-select>
-
+            <section
+              className={styles.settingsSection}
+              aria-labelledby="appearance-heading"
+            >
+              <h3 id="appearance-heading">Appearance</h3>
+              <div className={styles.fieldGrid}>
+                <s-select
+                  label="Format"
+                  name="aspectRatio"
+                  value={feed.aspectRatio}
+                >
+                  <s-option value="1:1">1:1</s-option>
+                  <s-option value="3:4">3:4</s-option>
+                  <s-option value="4:5">4:5</s-option>
+                  <s-option value="9:16">9:16</s-option>
+                  <s-option value="1:2">1:2</s-option>
+                  <s-option value="1:3">1:3</s-option>
+                  <s-option value="1:4">1:4</s-option>
+                </s-select>
+                <s-select label="Image fit" name="postFit" value={feed.postFit}>
+                  <s-option value="cover">Cover (crop to fill)</s-option>
+                  <s-option value="contain">Contain (show full image)</s-option>
+                </s-select>
+                <s-select
+                  label="Shape"
+                  name="postShape"
+                  value={postShape}
+                  onChange={(event) => setPostShape(event.currentTarget.value)}
+                >
+                  <s-option value="rectangle">Rectangle</s-option>
+                  <s-option value="circle">Circle</s-option>
+                </s-select>
+                <div>
+                  {postShape === "circle" && (
+                    <input
+                      type="hidden"
+                      name="cornerRadius"
+                      value={cornerRadius}
+                    />
+                  )}
                   <s-number-field
                     label="Corner radius (px)"
                     name="cornerRadius"
-                    defaultValue={String(feed.cornerRadius)}
+                    value={cornerRadius}
+                    onChange={(event) =>
+                      setCornerRadius(event.currentTarget.value)
+                    }
                     min={0}
                     max={50}
-                    {...(feed.postShape === "circle" ? { disabled: true } : {})}
-                  ></s-number-field>
-
-                  <s-select
-                    label="Post size"
-                    name="postSize"
-                    value={feed.postSize}
-                  >
-                    <s-option value="small">Small</s-option>
-                    <s-option value="medium">Medium</s-option>
-                    <s-option value="large">Large</s-option>
-                    <s-option value="xlarge">Extra large</s-option>
-                  </s-select>
-                </s-grid>
-              </s-stack>
-
-              <s-divider></s-divider>
-
-              <s-stack direction="block" gap="base">
-                <s-heading>Grid dimensions</s-heading>
-                <s-grid gridTemplateColumns="1fr 1fr" gap="base">
-                  <s-number-field
-                    label="Rows - desktop"
-                    name="rowsDesktop"
-                    defaultValue={String(feed.rowsDesktop)}
-                  ></s-number-field>
-                  <s-number-field
-                    label="Columns - desktop"
-                    name="colsDesktop"
-                    defaultValue={String(feed.colsDesktop)}
-                  ></s-number-field>
-
-                  <s-number-field
-                    label="Rows - mobile"
-                    name="rowsMobile"
-                    defaultValue={String(feed.rowsMobile)}
-                  ></s-number-field>
-                  <s-number-field
-                    label="Columns - mobile"
-                    name="colsMobile"
-                    defaultValue={String(feed.colsMobile)}
-                  ></s-number-field>
-                </s-grid>
-              </s-stack>
-
-              <s-button
-                type="submit"
-                variant="primary"
-                {...(isSubmitting ? { loading: true } : {})}
-              >
-                Save feed
-              </s-button>
-            </s-stack>
-          </form>
-        </s-section>
-      )}
-
-      {instagram.connected && posts.length === 0 && (
-        <s-section>
-          <s-banner heading="No posts synced yet" tone="info">
-            Click "Sync posts" above to pull in your latest Instagram content.
-          </s-banner>
-        </s-section>
-      )}
-
-      {posts.length > 0 && (
-        <s-section heading={`Synced posts (${posts.length})`}>
-          <s-text color="subdued">
-            Drag a tile to reorder. Pinned posts always show first on your
-            storefront; hidden posts stay here but won't be shown.
-          </s-text>
-          <div style={{ height: 16 }}></div>
-
-          <s-stack direction="inline" gap="small" alignItems="center">
-            {([
-              ["all", `All (${posts.length})`],
-              ["shown", `Shown (${posts.filter((p) => !p.hidden).length})`],
-              ["hidden", `Hidden (${posts.filter((p) => p.hidden).length})`],
-            ] as const).map(([value, label]) => (
-              <s-button
-                key={value}
-                variant={postFilter === value ? "primary" : "tertiary"}
-                onClick={() => setPostFilter(value)}
-              >
-                {label}
-              </s-button>
-            ))}
-          </s-stack>
-
-          <div style={{ height: 12 }}></div>
-
-          {selectedPostIds.size > 0 && (
-            <>
-              <s-stack direction="inline" gap="small" alignItems="center">
-                <s-text color="subdued">{selectedPostIds.size} selected</s-text>
-                <s-button variant="tertiary" onClick={() => applyBulkHide(false)}>
-                  Show selected
-                </s-button>
-                <s-button variant="tertiary" onClick={() => applyBulkHide(true)}>
-                  Hide selected
-                </s-button>
-                <s-button variant="tertiary" onClick={() => setSelectedPostIds(new Set())}>
-                  Clear selection
-                </s-button>
-              </s-stack>
-              <div style={{ height: 12 }}></div>
-            </>
-          )}
-
-          <s-grid gridTemplateColumns="repeat(auto-fill, 130px)" gap="base">
-            {orderedPosts
-              .filter((post) =>
-                postFilter === "shown"
-                  ? !post.hidden
-                  : postFilter === "hidden"
-                    ? post.hidden
-                    : true,
-              )
-              .map((post) => {
-              const mediaIcon =
-                post.mediaType === "VIDEO"
-                  ? "video"
-                  : post.mediaType === "CAROUSEL_ALBUM"
-                    ? "images"
-                    : "image";
-
-              return (
-                <MediaTile
-                  key={post.id}
-                  draggable
-                  onDragStart={handleDragStart(post.id)}
-                  onDragOver={handleDragOver}
-                  onDrop={handleDrop(post.id)}
-                >
-                  <s-stack direction="inline" gap="small-100" alignItems="center">
-                    <input
-                      type="checkbox"
-                      checked={selectedPostIds.has(post.id)}
-                      onChange={() => togglePostSelected(post.id)}
-                      style={{ cursor: "pointer" }}
-                    />
-                    <s-icon type="drag-handle" size="small"></s-icon>
-                    {post.pinned && <s-badge tone="success">Pinned</s-badge>}
-                    {post.hidden && <s-badge tone="critical">Hidden</s-badge>}
-                  </s-stack>
-                  <div
-                    style={{
-                      position: "relative",
-                      opacity: post.hidden ? 0.45 : 1,
-                    }}
-                  >
-                    <img
-                      src={post.thumbnailUrl ?? post.mediaUrl}
-                      alt={post.caption ?? ""}
-                      style={{
-                        width: "100%",
-                        aspectRatio: "1 / 1",
-                        objectFit: "cover",
-                        borderRadius: 8,
-                        display: "block",
-                        background: "#f1f2f3",
-                      }}
-                      onError={(event) => {
-                        const img = event.currentTarget;
-                        img.onerror = null;
-                        img.src =
-                          "data:image/svg+xml;utf8," +
-                          encodeURIComponent(
-                            '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">' +
-                              '<rect width="100" height="100" fill="#f1f2f3"/>' +
-                              '<rect x="22" y="28" width="56" height="44" rx="4" fill="none" stroke="#c4c6c9" stroke-width="3"/>' +
-                              '<circle cx="36" cy="42" r="5" fill="#c4c6c9"/>' +
-                              '<path d="M22 64 L42 48 L56 60 L68 48 L78 60 L78 68 L22 68 Z" fill="#c4c6c9"/>' +
-                              "</svg>",
-                          );
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 6,
-                        right: 6,
-                        background: "rgba(255, 255, 255, 0.9)",
-                        borderRadius: 6,
-                        width: 22,
-                        height: 22,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-                      }}
-                    >
-                      <s-icon type={mediaIcon} size="small"></s-icon>
-                    </div>
-                  </div>
-
-                  <s-stack direction="inline" gap="small-100">
-                    <s-button
-                      variant="tertiary"
-                      icon={post.pinned ? "star-filled" : "star"}
-                      accessibilityLabel={post.pinned ? "Unpin" : "Pin"}
-                      onClick={() => togglePostPin(post.id, post.pinned)}
-                    ></s-button>
-                    <s-button
-                      variant="tertiary"
-                      icon={post.hidden ? "eye-check-mark" : "eye-first"}
-                      accessibilityLabel={post.hidden ? "Unhide" : "Hide"}
-                      onClick={() => togglePostHide(post.id, post.hidden)}
-                    ></s-button>
-                  </s-stack>
-
-                  <ProductTagger
-                    tags={post.productTags}
-                    open={taggingId === post.id}
-                    onToggleOpen={() =>
-                      setTaggingId(taggingId === post.id ? null : post.id)
-                    }
-                    onTag={(product) => tagProduct(post.id, product)}
-                    onUntag={untagProduct}
-                    disabled={!canTagProducts}
+                    disabled={postShape === "circle"}
                   />
-                </MediaTile>
-              );
-            })}
-          </s-grid>
-        </s-section>
-      )}
+                </div>
+              </div>
+            </section>
 
+            <section
+              className={styles.settingsSection}
+              aria-labelledby="dimensions-heading"
+            >
+              <h3 id="dimensions-heading">Grid dimensions</h3>
+              <div className={styles.dimensions}>
+                <div className={styles.dimensionGroup}>
+                  <div className={styles.deviceLabel}>
+                    <s-icon type="desktop" size="small" />
+                    <span>Desktop</span>
+                  </div>
+                  <div className={styles.fieldGrid}>
+                    <s-number-field
+                      label="Rows"
+                      name="rowsDesktop"
+                      defaultValue={String(feed.rowsDesktop)}
+                    />
+                    <s-number-field
+                      label="Columns"
+                      name="colsDesktop"
+                      defaultValue={String(feed.colsDesktop)}
+                    />
+                  </div>
+                </div>
+                <div className={styles.dimensionGroup}>
+                  <div className={styles.deviceLabel}>
+                    <s-icon type="mobile" size="small" />
+                    <span>Mobile</span>
+                  </div>
+                  <div className={styles.fieldGrid}>
+                    <s-number-field
+                      label="Rows"
+                      name="rowsMobile"
+                      defaultValue={String(feed.rowsMobile)}
+                    />
+                    <s-number-field
+                      label="Columns"
+                      name="colsMobile"
+                      defaultValue={String(feed.colsMobile)}
+                    />
+                  </div>
+                </div>
+              </div>
+            </section>
+          </form>
+
+          <section className={styles.gallery} aria-labelledby="posts-heading">
+            <div className={styles.galleryHeader}>
+              <div>
+                <div className={styles.galleryTitle}>
+                  <h2 id="posts-heading">Synced posts</h2>
+                  <span className={styles.count}>{posts.length}</span>
+                </div>
+                <p>Manage the posts in your Instagram feed.</p>
+              </div>
+              <span className={styles.gallerySource}>
+                <s-icon type="image" size="small" />
+                Instagram
+              </span>
+            </div>
+            {posts.length > 0 ? (
+              <>
+                <div className={styles.galleryHint}>
+                  <s-icon type="drag-handle" size="small" />
+                  <span>
+                    Drag to reorder. Pin your favorites or hide a post.
+                  </span>
+                </div>
+
+                <div className={styles.filterTabs}>
+                  {(
+                    [
+                      ["all", `All (${posts.length})`],
+                      ["shown", `Shown (${posts.filter((p) => !p.hidden).length})`],
+                      ["hidden", `Hidden (${posts.filter((p) => p.hidden).length})`],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={
+                        postFilter === value
+                          ? styles.filterTabActive
+                          : styles.filterTab
+                      }
+                      onClick={() => setPostFilter(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {selectedPostIds.size > 0 && (
+                  <div className={styles.bulkBar}>
+                    <span>{selectedPostIds.size} selected</span>
+                    <button
+                      type="button"
+                      className={styles.bulkButton}
+                      onClick={() => applyBulkHide(false)}
+                    >
+                      Show selected
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.bulkButton}
+                      onClick={() => applyBulkHide(true)}
+                    >
+                      Hide selected
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.bulkButton}
+                      onClick={() => setSelectedPostIds(new Set())}
+                    >
+                      Clear selection
+                    </button>
+                  </div>
+                )}
+
+                <div className={styles.postGrid}>
+                  {visiblePosts.map((post, index) => {
+                    const mediaIcon =
+                      post.mediaType === "VIDEO"
+                        ? "video"
+                        : post.mediaType === "CAROUSEL_ALBUM"
+                          ? "images"
+                          : "image";
+                    const mediaLabel =
+                      post.mediaType === "VIDEO"
+                        ? "Reel"
+                        : post.mediaType === "CAROUSEL_ALBUM"
+                          ? "Carousel"
+                          : "Photo";
+                    return (
+                      <div
+                        key={post.id}
+                        className={styles.postCard}
+                        draggable={postFetcher.state === "idle"}
+                        onDragStart={handleDragStart(post.id)}
+                        onDragEnd={() => {
+                          dragIdRef.current = null;
+                        }}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop(post.id)}
+                      >
+                        <div className={styles.postImage}>
+                          <input
+                            type="checkbox"
+                            className={styles.postCheckbox}
+                            checked={selectedPostIds.has(post.id)}
+                            onChange={() => togglePostSelected(post.id)}
+                            aria-label="Select post"
+                          />
+                          <img
+                            src={post.thumbnailUrl ?? post.mediaUrl}
+                            alt={
+                              post.caption ||
+                              `Instagram ${mediaLabel.toLowerCase()} ${index + 1}`
+                            }
+                            className={
+                              post.hidden ? styles.hiddenImage : undefined
+                            }
+                            loading="lazy"
+                            draggable={false}
+                            onError={(event) => {
+                              const img = event.currentTarget;
+                              img.onerror = null;
+                              const fallback =
+                                "data:image/svg+xml;utf8," +
+                                encodeURIComponent(
+                                  '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="300" viewBox="0 0 240 300"><rect width="240" height="300" fill="#f1f2f3"/><rect x="92" y="128" width="56" height="44" rx="4" fill="none" stroke="#b5b8bd" stroke-width="2"/><circle cx="107" cy="141" r="5" fill="#b5b8bd"/><path d="m93 164 18-15 14 11 12-10 10 12" fill="none" stroke="#b5b8bd" stroke-width="2"/></svg>',
+                                );
+                              if (img.src !== fallback) img.src = fallback;
+                            }}
+                          />
+                          <span
+                            className={styles.mediaBadge}
+                            aria-label={mediaLabel}
+                          >
+                            <s-icon type={mediaIcon} size="small" />
+                          </span>
+                          <div className={styles.postBadges}>
+                            {post.pinned && (
+                              <span className={styles.pinnedBadge}>Pinned</span>
+                            )}
+                            {post.hidden && (
+                              <span className={styles.hiddenBadge}>Hidden</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className={styles.postToolbar}>
+                          <span className={styles.postType}>
+                            <s-icon type="drag-handle" size="small" />
+                            {mediaLabel}
+                          </span>
+                          <div className={styles.postActions}>
+                            <button
+                              type="button"
+                              className={
+                                post.pinned
+                                  ? styles.activeAction
+                                  : styles.postAction
+                              }
+                              aria-label={
+                                post.pinned ? "Unpin post" : "Pin post"
+                              }
+                              aria-pressed={post.pinned}
+                              title={post.pinned ? "Unpin post" : "Pin post"}
+                              disabled={postFetcher.state !== "idle"}
+                              onClick={() =>
+                                togglePostPin(post.id, post.pinned)
+                              }
+                            >
+                              <s-icon
+                                type={post.pinned ? "star-filled" : "star"}
+                                size="small"
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              className={
+                                post.hidden
+                                  ? styles.activeAction
+                                  : styles.postAction
+                              }
+                              aria-label={
+                                post.hidden ? "Unhide post" : "Hide post"
+                              }
+                              aria-pressed={post.hidden}
+                              title={post.hidden ? "Unhide post" : "Hide post"}
+                              disabled={postFetcher.state !== "idle"}
+                              onClick={() =>
+                                togglePostHide(post.id, post.hidden)
+                              }
+                            >
+                              <s-icon
+                                type={
+                                  post.hidden ? "eye-check-mark" : "eye-first"
+                                }
+                                size="small"
+                              />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className={styles.productSection}>
+                          <ProductTagger
+                            tags={post.productTags}
+                            open={taggingId === post.id}
+                            onToggleOpen={() =>
+                              setTaggingId(
+                                taggingId === post.id ? null : post.id,
+                              )
+                            }
+                            onTag={(product) => tagProduct(post.id, product)}
+                            onUntag={untagProduct}
+                            disabled={!canTagProducts}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className={styles.emptyState}>
+                <div className={styles.emptyIllustration} aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <div>
+                    <s-icon type="image" />
+                  </div>
+                </div>
+                <h3>
+                  {instagram.connected
+                    ? "Your feed starts here"
+                    : "Connect to start your feed"}
+                </h3>
+                <p>
+                  {instagram.connected
+                    ? 'Click "Sync posts" above to bring in your latest Instagram posts and reels.'
+                    : "Connect your Instagram account above to start building your storefront feed."}
+                </p>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
       <PageFooter />
     </s-page>
   );
