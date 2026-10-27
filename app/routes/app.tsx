@@ -9,6 +9,7 @@ import {
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import SupportChatWidget from "../components/SupportChatWidget";
 
 export const loader = async (_args: LoaderFunctionArgs) => {
   // Child routes authenticate their own loaders/actions. Authenticating here
@@ -79,7 +80,10 @@ export default function App() {
 
       </s-app-nav>
       {appBridgeReady ? (
-        <Outlet />
+        <>
+          <Outlet />
+          <SupportChatWidget />
+        </>
       ) : (
         <s-page>
           <s-spinner></s-spinner>
