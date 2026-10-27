@@ -78,18 +78,34 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const checkoutError = requestUrl.searchParams.get("checkout_error");
 
   let isDevelopmentStore = false;
+  let planDebug: { displayName: string; partnerDevelopment: boolean; shopifyPlus: boolean; domain: string } | null = null;
   try {
     const shopResponse = await admin.graphql(`#graphql
       query BillingShopDetails {
         shop {
-          plan { partnerDevelopment }
+          myshopifyDomain
+          plan { displayName partnerDevelopment shopifyPlus }
         }
       }
     `);
     const shopResult = (await shopResponse.json()) as {
-      data?: { shop: { plan: { partnerDevelopment: boolean } } };
+      data?: {
+        shop: {
+          myshopifyDomain: string;
+          plan: { displayName: string; partnerDevelopment: boolean; shopifyPlus: boolean };
+        };
+      };
     };
     isDevelopmentStore = shopResult.data?.shop.plan.partnerDevelopment ?? false;
+    if (shopResult.data) {
+      planDebug = {
+        displayName: shopResult.data.shop.plan.displayName,
+        partnerDevelopment: shopResult.data.shop.plan.partnerDevelopment,
+        shopifyPlus: shopResult.data.shop.plan.shopifyPlus,
+        domain: shopResult.data.shop.myshopifyDomain,
+      };
+    }
+    console.log("[billing] shop plan debug:", planDebug);
   } catch (error) {
     console.error("Could not look up shop type for billing:", error);
   }
@@ -116,6 +132,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       billingUpdated: requestUrl.searchParams.has("plan_handle"),
       isDevelopmentStore,
       requiresBilling: isDevelopmentStore === false && !subscription,
+      planDebug,
     };
   } catch (error) {
     console.error("Billing subscription lookup failed:", error);
@@ -128,6 +145,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       billingUpdated: false,
       isDevelopmentStore,
       requiresBilling: isDevelopmentStore === false,
+      planDebug,
     };
   }
 };
@@ -206,6 +224,7 @@ export default function Billing() {
     billingError,
     billingUpdated,
     isDevelopmentStore,
+    planDebug,
   } = useLoaderData<typeof loader>();
   const shopify = useAppBridge();
   const fetcher = useFetcher<typeof action>();
@@ -291,6 +310,13 @@ export default function Billing() {
                 Plans selected here are free to test and won't charge real
                 money. Regular pricing applies once this store goes live.
               </p>
+              {planDebug && (
+                <p style={{ marginTop: 8, fontFamily: "monospace", fontSize: 11 }}>
+                  domain: {planDebug.domain} · plan: {planDebug.displayName} ·
+                  partnerDevelopment: {String(planDebug.partnerDevelopment)} ·
+                  shopifyPlus: {String(planDebug.shopifyPlus)}
+                </p>
+              )}
             </div>
           </div>
         )}
