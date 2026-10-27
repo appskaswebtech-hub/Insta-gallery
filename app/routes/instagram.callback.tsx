@@ -1,0 +1,36 @@
+import type { LoaderFunctionArgs } from "react-router";
+import { redirect } from "react-router";
+import { completeInstagramConnection, syncInstagramPosts } from "../instagram.server";
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const shop = url.searchParams.get("state");
+  const error = url.searchParams.get("error");
+
+  if (error) {
+    return redirect(`/app/main-feed?instagram=error&reason=${encodeURIComponent(error)}`);
+  }
+
+  if (!code || !shop) {
+    throw new Response("Missing code or state from Instagram callback", {
+      status: 400,
+    });
+  }
+
+  try {
+    await completeInstagramConnection(shop, code);
+  } catch (error) {
+    console.error("completeInstagramConnection failed:", error);
+    throw error;
+  }
+
+  try {
+    await syncInstagramPosts(shop);
+  } catch (error) {
+    console.error("syncInstagramPosts failed:", error);
+    throw error;
+  }
+
+  return redirect(`/app/main-feed?shop=${encodeURIComponent(shop)}&instagram=connected`);
+};
