@@ -12,7 +12,7 @@ import supportPrisma from "./support-db.server";
  */
 
 const AUTO_REPLY_TEXT =
-  "Thanks for reaching out! A support agent will be with you shortly -- feel free to add more detail in the meantime.";
+  "Thank you for messaging us! One of our support members will reach you soon.";
 
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "support");
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10MB
@@ -25,8 +25,8 @@ const ALLOWED_TYPES = new Set([
 ]);
 
 type SupportlyNotification =
-  | { message: unknown }
-  | { type: "typing" | "seen" | "reset" };
+  | { message: unknown; name?: string; email?: string }
+  | { type: "typing" | "seen" | "reset" | "closed" };
 
 let warnedAboutSupportlyConfiguration = false;
 
@@ -94,6 +94,8 @@ export async function sendMessage(opts: {
   sender: "shop" | "admin";
   body?: string | null;
   file?: File | null;
+  name?: string | null;
+  email?: string | null;
 }) {
   const thread = await getOrCreateThread(opts.shop);
   const body = (opts.body || "").trim();
@@ -139,7 +141,9 @@ export async function sendMessage(opts: {
   });
 
   if (opts.sender === "shop") {
-    void notifyDashboard(opts.shop, { message }).catch((error: unknown) => {
+    const notifyName = opts.name?.trim() || undefined;
+    const notifyEmail = opts.email?.trim() || undefined;
+    void notifyDashboard(opts.shop, { message, name: notifyName, email: notifyEmail }).catch((error: unknown) => {
       console.error("Could not notify Supportly about a new message.", error);
     });
   }
@@ -156,6 +160,9 @@ export async function sendMessage(opts: {
 export async function closeThread(shop: string) {
   const thread = await getOrCreateThread(shop);
   await supportPrisma.supportThread.update({ where: { id: thread.id }, data: { closedAt: new Date() } });
+  void notifyDashboard(shop, { type: "closed" }).catch((error: unknown) => {
+    console.error("Could not notify Supportly about chat close.", error);
+  });
 }
 
 export async function reopenThread(shop: string) {

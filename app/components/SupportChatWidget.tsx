@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 
 type Message = {
   id: string;
-  sender: "shop" | "admin";
+  sender: "shop" | "admin" | "system" | "bot" | "BOT";
   body: string | null;
   attachmentUrl: string | null;
   attachmentName: string | null;
@@ -52,6 +52,15 @@ const WIDGET_CSS = `
 .igsc-newchat-btn{background:#0f766e;color:#fff;border:none;border-radius:9px;padding:9px 18px;font-size:12.5px;font-weight:700;cursor:pointer}
 .igsc-newchat-btn:disabled{opacity:.6;cursor:not-allowed}
 .igsc-typing{font-style:italic;opacity:.65}
+.igsc-system{text-align:center;font-size:11.5px;color:#9ca3af;padding:2px 0}
+.igsc-prechat{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;background:#fafafa}
+.igsc-prechat-title{font-weight:700;font-size:14px;color:#111827}
+.igsc-prechat-sub{font-size:12px;color:#6b7280;margin-top:-4px}
+.igsc-prechat input,.igsc-prechat textarea{border:1.5px solid #e5e0e2;border-radius:10px;padding:9px 11px;font:inherit;font-size:13px;outline:none;width:100%;box-sizing:border-box;background:#fff}
+.igsc-prechat input:focus,.igsc-prechat textarea:focus{border-color:#0f766e}
+.igsc-prechat textarea{resize:none;height:70px}
+.igsc-prechat-btn{background:#0f766e;color:#fff;border:none;border-radius:10px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;width:100%;margin-top:2px}
+.igsc-prechat-btn:disabled{opacity:.5;cursor:not-allowed}
 `;
 
 // Floating support chat, available on every /app/* page -- the store owner
@@ -76,6 +85,12 @@ export default function SupportChatWidget() {
   const [adminTyping, setAdminTyping] = useState(false);
   const [ending, setEnding] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [contactName, setContactName] = useState<string>(() => {
+    try { return localStorage.getItem("igsc-contact-name") ?? ""; } catch { return ""; }
+  });
+  const [prechatName, setPrechatName] = useState("");
+  const [prechatEmail, setPrechatEmail] = useState("");
+  const [prechatMsg, setPrechatMsg] = useState("");
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -185,10 +200,43 @@ export default function SupportChatWidget() {
       .then(() => {
         setMessages([]);
         setClosed(false);
+        setContactName("");
+        try { localStorage.removeItem("igsc-contact-name"); } catch {}
+        setPrechatName(""); setPrechatEmail(""); setPrechatMsg("");
       })
       .catch(() => {})
       .finally(() => setStarting(false));
   }, [starting]);
+
+  const submitPrechat = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    const name = prechatName.trim();
+    const email = prechatEmail.trim();
+    const body = prechatMsg.trim();
+    if (!name || !email || !body || sending) return;
+    setSending(true);
+    setErr(null);
+
+    const form = new FormData();
+    form.set("body", body);
+    form.set("name", name);
+    form.set("email", email);
+
+    fetch("/app/support/messages", { method: "POST", body: form })
+      .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => {
+        if (!ok) {
+          setErr(d?.error || "Could not send message.");
+          return;
+        }
+        setMessages((prev) => (prev.some((m) => m.id === d.message.id) ? prev : [...prev, d.message]));
+        setContactName(name);
+        try { localStorage.setItem("igsc-contact-name", name); } catch {}
+        scrollToBottom();
+      })
+      .catch(() => setErr("Could not send message. Check your connection."))
+      .finally(() => setSending(false));
+  }, [prechatName, prechatEmail, prechatMsg, sending, scrollToBottom]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -196,6 +244,10 @@ export default function SupportChatWidget() {
       send();
     }
   };
+
+  // Gated on `loaded` so an existing conversation doesn't flash the form
+  // before the first fetch comes back.
+  const showPreChat = loaded && messages.length === 0 && !contactName && !closed;
 
   return (
     <>
@@ -231,35 +283,74 @@ export default function SupportChatWidget() {
             </div>
           </div>
 
+          {showPreChat ? (
+            <form className="igsc-prechat" onSubmit={submitPrechat}>
+              <div className="igsc-prechat-title">How can we help?</div>
+              <div className="igsc-prechat-sub">Fill in your details and we'll get back to you shortly.</div>
+              {err && <div className="igsc-err">{err}</div>}
+              <input
+                placeholder="Your name *"
+                value={prechatName}
+                onChange={(e) => setPrechatName(e.target.value)}
+                required
+              />
+              <input
+                type="email"
+                placeholder="Email address *"
+                value={prechatEmail}
+                onChange={(e) => setPrechatEmail(e.target.value)}
+                required
+              />
+              <textarea
+                placeholder="Describe your issue *"
+                value={prechatMsg}
+                onChange={(e) => setPrechatMsg(e.target.value)}
+                required
+              />
+              <button
+                type="submit"
+                className="igsc-prechat-btn"
+                disabled={sending || !prechatName.trim() || !prechatEmail.trim() || !prechatMsg.trim()}
+              >
+                {sending ? "Sending..." : "Start Chat"}
+              </button>
+            </form>
+          ) : (
+            <>
           <div className="igsc-body" ref={listRef}>
             {loaded && messages.length === 0 && (
               <div className="igsc-empty">
                 Send us a message and we will get back to you here. You can attach a screenshot or a document too.
               </div>
             )}
-            {messages.map((m) => (
-              <div key={m.id} className={"igsc-row igsc-row--" + m.sender}>
-                <div>
-                  <div className="igsc-bubble">
-                    {m.body}
-                    {m.attachmentUrl && m.attachmentType?.startsWith("image/") && (
-                      <a href={m.attachmentUrl} target="_blank" rel="noreferrer">
-                        <img src={m.attachmentUrl} alt={m.attachmentName || "attachment"} className="igsc-attach-img" />
-                      </a>
-                    )}
-                    {m.attachmentUrl && !m.attachmentType?.startsWith("image/") && (
-                      <a href={m.attachmentUrl} target="_blank" rel="noreferrer" className="igsc-attach">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
-                        {m.attachmentName || "Attachment"}
-                      </a>
-                    )}
-                  </div>
-                  <div className="igsc-time">
-                    {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            {messages.map((m) => {
+              if (m.sender === "system") {
+                return <div key={m.id} className="igsc-system">{m.body}</div>;
+              }
+              return (
+                <div key={m.id} className={"igsc-row igsc-row--" + m.sender}>
+                  <div>
+                    <div className="igsc-bubble">
+                      {m.body}
+                      {m.attachmentUrl && m.attachmentType?.startsWith("image/") && (
+                        <a href={m.attachmentUrl} target="_blank" rel="noreferrer">
+                          <img src={m.attachmentUrl} alt={m.attachmentName || "attachment"} className="igsc-attach-img" />
+                        </a>
+                      )}
+                      {m.attachmentUrl && !m.attachmentType?.startsWith("image/") && (
+                        <a href={m.attachmentUrl} target="_blank" rel="noreferrer" className="igsc-attach">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
+                          {m.attachmentName || "Attachment"}
+                        </a>
+                      )}
+                    </div>
+                    <div className="igsc-time">
+                      {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
             {adminTyping && !closed && (
               <div className="igsc-row igsc-row--admin">
                 <div className="igsc-bubble igsc-typing">typing...</div>
@@ -318,6 +409,8 @@ export default function SupportChatWidget() {
               </>
             )}
           </div>
+            </>
+          )}
         </div>
       )}
     </>
