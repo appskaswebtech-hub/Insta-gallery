@@ -21,6 +21,7 @@ import {
 } from "../instagram.server";
 import { getFeed, saveFeed, type FeedInput } from "../feed.server";
 import { getCachedPlanHandle } from "../plan-limits.server";
+import { resolveMediaUrl } from "../uploads.server";
 import {
   addProductTag,
   canUseProductTagging,
@@ -93,6 +94,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       : { connected: false as const },
     posts: posts.map((post) => ({
       ...post,
+      mediaUrl: resolveMediaUrl(post.mediaUrl),
+      thumbnailUrl: post.thumbnailUrl ? resolveMediaUrl(post.thumbnailUrl) : null,
       productTags: tagsByPostKey.get(post.id) ?? [],
     })),
     feed: feed ?? DEFAULT_FEED,

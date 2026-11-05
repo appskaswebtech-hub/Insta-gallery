@@ -68,18 +68,34 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         pinned: item.pinned,
       };
     }),
-    ...instagramPosts.map((post) => ({
-      id: post.id,
-      mediaType: post.mediaType,
-      mediaUrl: post.mediaUrl,
-      thumbnailUrl: post.thumbnailUrl,
-      permalink: post.permalink,
-      caption: post.caption,
-      carouselChildren: post.carouselChildren
-        ? JSON.parse(post.carouselChildren)
-        : null,
-      pinned: post.pinned,
-    })),
+    ...instagramPosts.map((post) => {
+      const children = post.carouselChildren
+        ? (JSON.parse(post.carouselChildren) as Array<{
+            media_type: string;
+            media_url: string | null;
+            thumbnail_url: string | null;
+          }>)
+        : null;
+
+      return {
+        id: post.id,
+        mediaType: post.mediaType,
+        mediaUrl: resolveMediaUrl(post.mediaUrl),
+        thumbnailUrl: post.thumbnailUrl ? resolveMediaUrl(post.thumbnailUrl) : null,
+        permalink: post.permalink,
+        caption: post.caption,
+        carouselChildren: children
+          ? children.map((child) => ({
+              ...child,
+              media_url: child.media_url ? resolveMediaUrl(child.media_url) : null,
+              thumbnail_url: child.thumbnail_url
+                ? resolveMediaUrl(child.thumbnail_url)
+                : null,
+            }))
+          : null,
+        pinned: post.pinned,
+      };
+    }),
   ]
     .sort((a, b) => Number(b.pinned) - Number(a.pinned))
     .slice(0, postLimit);

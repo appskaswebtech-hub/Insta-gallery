@@ -130,7 +130,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       requiresBilling: isDevelopmentStore === false,
     };
   }
-};
+}; 
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session, redirect } = await authenticate.admin(request);
