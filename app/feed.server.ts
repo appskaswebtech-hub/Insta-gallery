@@ -8,7 +8,6 @@ export interface FeedInput {
   postsToShow: string;
   layout: string;
   title: string;
-  onPostClick: string;
   postSpacing: string;
   aspectRatio: string;
   postFit: string;
@@ -34,6 +33,7 @@ export interface FeedDesignSettingsInput {
   linkToOriginalPost: boolean;
   showSliderPreviews: boolean;
   autoShowNewPosts: boolean;
+  onPostClick: string;
 }
 
 export function saveFeedDesignSettings(

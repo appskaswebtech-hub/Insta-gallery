@@ -20,6 +20,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       linkToOriginalPost: feed?.linkToOriginalPost ?? false,
       showSliderPreviews: feed?.showSliderPreviews ?? false,
       autoShowNewPosts: feed?.autoShowNewPosts ?? true,
+      directInstagramRedirect: feed?.onPostClick === "redirect",
     },
   };
 };
@@ -34,6 +35,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     linkToOriginalPost: formData.get("linkToOriginalPost") === "true",
     showSliderPreviews: formData.get("showSliderPreviews") === "true",
     autoShowNewPosts: formData.get("autoShowNewPosts") === "true",
+    onPostClick:
+      formData.get("directInstagramRedirect") === "true" ? "redirect" : "popup",
   });
 
   return { saved: true };
@@ -102,6 +105,7 @@ export default function Settings() {
         linkToOriginalPost: String(settings.linkToOriginalPost),
         showSliderPreviews: String(settings.showSliderPreviews),
         autoShowNewPosts: String(settings.autoShowNewPosts),
+        directInstagramRedirect: String(settings.directInstagramRedirect),
         [name]: String(!currentValue),
       },
       { method: "POST" },
@@ -179,6 +183,20 @@ export default function Settings() {
             checked={settings.autoShowNewPosts}
             onChange={() =>
               toggle("autoShowNewPosts", settings.autoShowNewPosts)
+            }
+          />
+
+          <SettingRow
+            iconPath="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"
+            heading="Direct Instagram redirection"
+            label="Open the original Instagram post when a photo is clicked"
+            details="Turn this on to send shoppers straight to the post on Instagram instead of opening it in a popup on your storefront."
+            checked={settings.directInstagramRedirect}
+            onChange={() =>
+              toggle(
+                "directInstagramRedirect",
+                settings.directInstagramRedirect,
+              )
             }
           />
         </div>
