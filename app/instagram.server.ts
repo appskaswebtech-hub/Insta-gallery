@@ -1,4 +1,5 @@
 import prisma from "./db.server";
+import { cacheRemoteFile } from "./uploads.server";
 
 const INSTAGRAM_OAUTH_BASE = "https://www.instagram.com/oauth/authorize";
 const INSTAGRAM_TOKEN_URL = "https://api.instagram.com/oauth/access_token";
@@ -203,6 +204,34 @@ interface CarouselChild {
   thumbnail_url?: string;
 }
 
+function extensionFromUrl(url: string, isVideo: boolean) {
+  try {
+    const pathname = new URL(url).pathname;
+    const match = pathname.match(/\.(jpg|jpeg|png|webp|mp4|mov|webm)$/i);
+    if (match) return `.${match[1].toLowerCase()}`;
+  } catch {
+    // Not a parseable URL - fall through to the type-based default.
+  }
+  return isVideo ? ".mp4" : ".jpg";
+}
+
+// Downloads an Instagram-hosted media URL into our own storage, keyed by a
+// name derived from the Instagram media id so re-syncing the same post skips
+// the re-download. Falls back to the original URL if the fetch fails (it's
+// still fresh right after an Instagram API call, just not long-term stable).
+async function cacheInstagramMedia(
+  key: string,
+  url: string | undefined,
+  mediaType: string,
+) {
+  if (!url) return url;
+
+  const isVideo = mediaType === "VIDEO";
+  const filename = `ig-${key}${extensionFromUrl(url, isVideo)}`;
+  const cachedUrl = await cacheRemoteFile(url, filename);
+  return cachedUrl ?? url;
+}
+
 async function fetchCarouselChildren(mediaId: string, accessToken: string) {
   const params = new URLSearchParams({
     fields: "media_type,media_url,thumbnail_url",
@@ -238,14 +267,37 @@ export async function syncInstagramPosts(shop: string) {
           ? await fetchCarouselChildren(node.id, account.accessToken)
           : null;
 
+      const [cachedMediaUrl, cachedThumbnailUrl, cachedChildren] =
+        await Promise.all([
+          cacheInstagramMedia(node.id, node.media_url, node.media_type),
+          cacheInstagramMedia(`${node.id}-thumb`, node.thumbnail_url, "IMAGE"),
+          carouselChildren
+            ? Promise.all(
+                carouselChildren.map(async (child, index) => ({
+                  media_type: child.media_type,
+                  media_url: await cacheInstagramMedia(
+                    `${node.id}-c${index}`,
+                    child.media_url,
+                    child.media_type,
+                  ),
+                  thumbnail_url: await cacheInstagramMedia(
+                    `${node.id}-c${index}-thumb`,
+                    child.thumbnail_url,
+                    "IMAGE",
+                  ),
+                })),
+              )
+            : null,
+        ]);
+
       const data = {
         mediaType: node.media_type,
-        mediaUrl: node.media_url,
-        thumbnailUrl: node.thumbnail_url,
+        mediaUrl: cachedMediaUrl ?? node.media_url,
+        thumbnailUrl: cachedThumbnailUrl,
         permalink: node.permalink,
         caption: node.caption,
-        carouselChildren: carouselChildren
-          ? JSON.stringify(carouselChildren)
+        carouselChildren: cachedChildren
+          ? JSON.stringify(cachedChildren)
           : null,
         timestamp: new Date(node.timestamp),
       };

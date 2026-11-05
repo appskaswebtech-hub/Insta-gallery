@@ -18,6 +18,7 @@ import {
   reorderInstagramPosts,
 } from "../instagram.server";
 import { getFeed, saveFeed, type FeedInput } from "../feed.server";
+import { resolveMediaUrl } from "../uploads.server";
 import PageFooter from "../components/PageFooter";
 
 const DEFAULT_FEED: FeedInput = {
@@ -50,7 +51,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     instagram: instagramAccount
       ? { connected: true as const, username: instagramAccount.username }
       : { connected: false as const },
-    posts,
+    posts: posts.map((post) => ({
+      ...post,
+      mediaUrl: resolveMediaUrl(post.mediaUrl),
+      thumbnailUrl: post.thumbnailUrl ? resolveMediaUrl(post.thumbnailUrl) : null,
+    })),
     feed: feed ?? DEFAULT_FEED,
   };
 };
