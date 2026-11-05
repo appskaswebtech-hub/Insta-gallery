@@ -5,7 +5,7 @@
   --purple: #7840b0;
   --pink: #b82b78;
   --brand-gradient: linear-gradient(115deg, #793bb4, #b92c81 65%, #c43c61);
-  max-width: 1400px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 28px;
   border-radius: 18px;
@@ -24,6 +24,7 @@
   line-height: 1.5;
 }
 
+.workspace,
 .workspace * {
   box-sizing: border-box;
 }
