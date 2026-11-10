@@ -7,6 +7,7 @@ import { resolveMediaUrl } from "../uploads.server";
 import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "../youtube";
 import { getCachedPlanHandle, getPostLimitForPlan } from "../plan-limits.server";
 import { canUseProductTagging, getProductTagsForPosts } from "../product-tags.server";
+import { normalizeLocale } from "../i18n/locales";
 
 const DEFAULT_FEED = {
   postsToShow: "own_posts",
@@ -29,7 +30,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.public.appProxy(request);
 
   if (!session) {
-    return Response.json({ posts: [], feed: DEFAULT_FEED });
+    return Response.json({ posts: [], locale: "en", feed: DEFAULT_FEED });
   }
 
   const [customMedia, instagramPosts, feed, planHandle] = await Promise.all([
@@ -118,8 +119,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     })),
   }));
 
+  // The storefront has no merchant-admin-locale signal to auto-detect from,
+  // so it only honors an explicit override (Settings page); "auto"/unset
+  // falls back to English here, matching the admin's own fallback.
+  const locale =
+    feed?.language && feed.language !== "auto"
+      ? normalizeLocale(feed.language)
+      : "en";
+
   return Response.json({
     posts: postsWithProducts,
+    locale,
     feed: feed
       ? {
           postsToShow: feed.postsToShow,

@@ -5,6 +5,8 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { requireActivePlanForLiveStore } from "../billing-access.server";
 import { getFeed, saveFeedDesignSettings } from "../feed.server";
+import { resolveLocale, getDictionary } from "../i18n/resolve.server";
+import { SUPPORTED_LOCALES } from "../i18n/locales";
 import PageFooter from "../components/PageFooter";
 import styles from "../styles/settings.module.css";
 import settingsStyles from "../styles/settings.module.css?inline";
@@ -13,14 +15,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   await requireActivePlanForLiveStore(admin, request);
   const feed = await getFeed(session.shop);
+  const locale = await resolveLocale(session.shop, request);
+  const t = getDictionary(locale, "settings");
+  const tc = getDictionary(locale, "common");
 
   return {
+    t,
+    tc,
     settings: {
       showLoadingAnimation: feed?.showLoadingAnimation ?? false,
       linkToOriginalPost: feed?.linkToOriginalPost ?? false,
       showSliderPreviews: feed?.showSliderPreviews ?? false,
       autoShowNewPosts: feed?.autoShowNewPosts ?? true,
       directInstagramRedirect: feed?.onPostClick === "redirect",
+      language: feed?.language ?? "auto",
     },
   };
 };
@@ -29,6 +37,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   await requireActivePlanForLiveStore(admin, request);
   const formData = await request.formData();
+  const language = String(formData.get("language") ?? "auto");
 
   await saveFeedDesignSettings(session.shop, {
     showLoadingAnimation: formData.get("showLoadingAnimation") === "true",
@@ -37,6 +46,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     autoShowNewPosts: formData.get("autoShowNewPosts") === "true",
     onPostClick:
       formData.get("directInstagramRedirect") === "true" ? "redirect" : "popup",
+    language:
+      language === "auto" || (SUPPORTED_LOCALES as readonly string[]).includes(language)
+        ? language
+        : "auto",
   });
 
   return { saved: true };
@@ -88,15 +101,15 @@ function SettingRow({
 }
 
 export default function Settings() {
-  const { settings } = useLoaderData<typeof loader>();
+  const { settings, t, tc } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
 
   useEffect(() => {
     if (fetcher.data?.saved) {
-      shopify.toast.show("Settings saved");
+      shopify.toast.show(t.toastSaved);
     }
-  }, [fetcher.data, shopify]);
+  }, [fetcher.data, shopify, t.toastSaved]);
 
   const toggle = (name: string, currentValue: boolean) => {
     fetcher.submit(
@@ -106,23 +119,35 @@ export default function Settings() {
         showSliderPreviews: String(settings.showSliderPreviews),
         autoShowNewPosts: String(settings.autoShowNewPosts),
         directInstagramRedirect: String(settings.directInstagramRedirect),
+        language: settings.language,
         [name]: String(!currentValue),
       },
       { method: "POST" },
     );
   };
 
+  const changeLanguage = (language: string) => {
+    fetcher.submit(
+      {
+        showLoadingAnimation: String(settings.showLoadingAnimation),
+        linkToOriginalPost: String(settings.linkToOriginalPost),
+        showSliderPreviews: String(settings.showSliderPreviews),
+        autoShowNewPosts: String(settings.autoShowNewPosts),
+        directInstagramRedirect: String(settings.directInstagramRedirect),
+        language,
+      },
+      { method: "POST" },
+    );
+  };
+
   return (
-    <s-page heading="Settings" inlineSize="large">
+    <s-page heading={t.pageTitle} inlineSize="large">
       <style>{settingsStyles}</style>
       <div className={styles.workspace}>
         <header className={styles.pageHeader}>
           <div>
-            <h1>Fine-tune the experience</h1>
-            <p>
-              Control how your media feed behaves on the storefront. Changes
-              apply immediately, no need to republish your theme.
-            </p>
+            <h1>{t.heroHeading}</h1>
+            <p>{t.heroSubtitle}</p>
           </div>
           <div className={styles.pageMark} aria-hidden="true">
             <svg
@@ -144,9 +169,9 @@ export default function Settings() {
         <div className={styles.panel}>
           <SettingRow
             iconPath="M12 2a10 10 0 1 0 10 10M12 6v6l4 2"
-            heading="Loading behavior"
-            label="Show feed loading animation"
-            details="Show an animation when loading the feed. Recommended when the feed is on the top of the page."
+            heading={t.loadingHeading}
+            label={t.loadingLabel}
+            details={t.loadingDetails}
             checked={settings.showLoadingAnimation}
             onChange={() =>
               toggle("showLoadingAnimation", settings.showLoadingAnimation)
@@ -155,9 +180,9 @@ export default function Settings() {
 
           <SettingRow
             iconPath="M14 4h6v6M10 14 20 4M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"
-            heading="Popup behavior"
-            label="Show link to the original media on popup"
-            details="Adds a link to open the original photo or video file inside the popup."
+            heading={t.popupHeading}
+            label={t.popupLabel}
+            details={t.popupDetails}
             checked={settings.linkToOriginalPost}
             onChange={() =>
               toggle("linkToOriginalPost", settings.linkToOriginalPost)
@@ -166,9 +191,9 @@ export default function Settings() {
 
           <SettingRow
             iconPath="M4 4h6v16H4zM14 4h6v16h-6z"
-            heading="Slider behavior"
-            label="Show part of next and previous post in sliders"
-            details="Display part of the next and previous post at the edges of the slider."
+            heading={t.sliderHeading}
+            label={t.sliderLabel}
+            details={t.sliderDetails}
             checked={settings.showSliderPreviews}
             onChange={() =>
               toggle("showSliderPreviews", settings.showSliderPreviews)
@@ -177,9 +202,9 @@ export default function Settings() {
 
           <SettingRow
             iconPath="M12 5v14M5 12h14"
-            heading="New posts"
-            label="Show new Instagram posts automatically after syncing"
-            details="Turn this off to review and approve each newly synced post before it appears on your storefront."
+            heading={t.newPostsHeading}
+            label={t.newPostsLabel}
+            details={t.newPostsDetails}
             checked={settings.autoShowNewPosts}
             onChange={() =>
               toggle("autoShowNewPosts", settings.autoShowNewPosts)
@@ -188,9 +213,9 @@ export default function Settings() {
 
           <SettingRow
             iconPath="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"
-            heading="Direct Instagram redirection"
-            label="Open the original Instagram post when a photo is clicked"
-            details="Turn this on to send shoppers straight to the post on Instagram instead of opening it in a popup on your storefront."
+            heading={t.redirectHeading}
+            label={t.redirectLabel}
+            details={t.redirectDetails}
             checked={settings.directInstagramRedirect}
             onChange={() =>
               toggle(
@@ -199,10 +224,50 @@ export default function Settings() {
               )
             }
           />
+
+          <div className={styles.row}>
+            <div className={styles.rowInfo}>
+              <div className={styles.rowIcon} aria-hidden="true">
+                <svg
+                  viewBox="0 0 24 24"
+                  width="20"
+                  height="20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"></path>
+                </svg>
+              </div>
+              <div className={styles.rowCopy}>
+                <h2>{t.languageHeading}</h2>
+                <p>
+                  <strong>{t.languageLabel}</strong>
+                </p>
+                <p>{t.languageDetails}</p>
+              </div>
+            </div>
+            <s-select
+              label={t.languageLabel}
+              labelAccessibilityVisibility="exclusive"
+              value={settings.language}
+              onChange={(event) => changeLanguage(event.currentTarget.value)}
+            >
+              <s-option value="auto">{t.languageOptionAuto}</s-option>
+              <s-option value="en">{t.languageOptionEn}</s-option>
+              <s-option value="de">{t.languageOptionDe}</s-option>
+              <s-option value="es">{t.languageOptionEs}</s-option>
+              <s-option value="fr">{t.languageOptionFr}</s-option>
+              <s-option value="it">{t.languageOptionIt}</s-option>
+            </s-select>
+          </div>
         </div>
       </div>
 
-      <PageFooter />
+      <PageFooter text={tc.footerRights} />
     </s-page>
   );
 }

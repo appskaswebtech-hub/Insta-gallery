@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import type { ProductSearchResult } from "../product-tags.server";
+import { interpolate } from "../i18n/format";
 
 export interface TaggedProduct {
   id: string;
@@ -12,6 +13,20 @@ export interface TaggedProduct {
   imageUrl: string | null;
 }
 
+export interface ProductTaggerDictionary {
+  [key: string]: string;
+  tagProductsButton: string;
+  tagProductsButtonWithCount: string;
+  tagProductsAriaDisabled: string;
+  tagProductsAria: string;
+  upgradeHeading: string;
+  upgradeBody: string;
+  removeProductAria: string;
+  searchLabel: string;
+  searchPlaceholder: string;
+  addProductAria: string;
+}
+
 export default function ProductTagger({
   tags,
   open,
@@ -19,6 +34,7 @@ export default function ProductTagger({
   onTag,
   onUntag,
   disabled,
+  t,
 }: {
   tags: TaggedProduct[];
   open: boolean;
@@ -26,6 +42,7 @@ export default function ProductTagger({
   onTag: (product: ProductSearchResult) => void;
   onUntag: (tagId: string) => void;
   disabled?: boolean;
+  t: ProductTaggerDictionary;
 }) {
   const searchFetcher = useFetcher<{ products: ProductSearchResult[] }>();
   const [query, setQuery] = useState("");
@@ -53,15 +70,17 @@ export default function ProductTagger({
       <s-button
         variant="tertiary"
         icon="product"
-        accessibilityLabel={disabled ? "Tag products (Basic/Pro plan)" : "Tag products"}
+        accessibilityLabel={disabled ? t.tagProductsAriaDisabled : t.tagProductsAria}
         onClick={onToggleOpen}
       >
-        {tags.length > 0 ? `Products (${tags.length})` : "Tag products"}
+        {tags.length > 0
+          ? interpolate(t.tagProductsButtonWithCount, { count: tags.length })
+          : t.tagProductsButton}
       </s-button>
 
       {disabled && open && (
-        <s-banner tone="warning" heading="Upgrade to tag products">
-          Product tagging is available on the Basic and Pro plans.
+        <s-banner tone="warning" heading={t.upgradeHeading}>
+          {t.upgradeBody}
         </s-banner>
       )}
 
@@ -94,7 +113,7 @@ export default function ProductTagger({
                     variant="tertiary"
                     tone="critical"
                     icon="x-circle"
-                    accessibilityLabel="Remove product"
+                    accessibilityLabel={t.removeProductAria}
                     onClick={() => onUntag(tag.id)}
                   ></s-button>
                 </div>
@@ -103,9 +122,9 @@ export default function ProductTagger({
           )}
 
           <s-text-field
-            label="Search products"
+            label={t.searchLabel}
             labelAccessibilityVisibility="exclusive"
-            placeholder="Search products by title"
+            placeholder={t.searchPlaceholder}
             value={query}
             onChange={(event) => runSearch(event.currentTarget.value)}
           ></s-text-field>
@@ -136,7 +155,7 @@ export default function ProductTagger({
                   <s-button
                     variant="tertiary"
                     icon="plus-circle"
-                    accessibilityLabel="Add product"
+                    accessibilityLabel={t.addProductAria}
                     onClick={() => onTag(product)}
                   ></s-button>
                 </div>

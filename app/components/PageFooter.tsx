@@ -1,4 +1,8 @@
-export default function PageFooter() {
+export default function PageFooter({
+  text = "All rights reserved.",
+}: {
+  text?: string;
+}) {
   return (
     <div
       style={{
@@ -10,7 +14,7 @@ export default function PageFooter() {
     >
       <div style={{ paddingTop: 16 }}>
         <s-text color="subdued">
-          © {new Date().getFullYear()} InstaGallery. All rights reserved.
+          © {new Date().getFullYear()} InstaGallery. {text}
         </s-text>
       </div>
     </div>

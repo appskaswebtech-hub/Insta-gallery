@@ -23,6 +23,9 @@ import {
   removeProductTag,
   type ProductSearchResult,
 } from "../product-tags.server";
+import { resolveLocale, getDictionary } from "../i18n/resolve.server";
+import { interpolate } from "../i18n/format";
+import type { ProductTaggerDictionary } from "../components/ProductTagger";
 import PageFooter from "../components/PageFooter";
 import ProductTagger from "../components/ProductTagger";
 import styles from "../styles/custom-media.module.css";
@@ -44,7 +47,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     media.map((item) => customMediaPostKey(item.id)),
   );
 
+  const locale = await resolveLocale(session.shop, request);
+  const t = getDictionary(locale, "customMedia");
+  const tc = getDictionary(locale, "common");
+  const tProduct = getDictionary<ProductTaggerDictionary>(locale, "productTagger");
+
   return {
+    t,
+    tc,
+    tProduct,
     canTagProducts,
     media: media.map((item) => ({
       ...item,
@@ -61,13 +72,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   await requireActivePlanForLiveStore(admin, request);
   const formData = await request.formData();
   const intent = formData.get("intent");
+  const locale = await resolveLocale(session.shop, request);
+  const t = getDictionary(locale, "customMedia");
 
   if (intent === "add") {
     const url = String(formData.get("url") ?? "").trim();
     const mediaType = String(formData.get("mediaType") ?? "image");
 
     if (!url) {
-      return { error: "Please enter a URL" };
+      return { error: t.errorEnterUrl };
     }
 
     await addCustomMedia(session.shop, { mediaType, url });
@@ -80,7 +93,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       .filter((f): f is File => f instanceof File && f.size > 0);
 
     if (files.length === 0) {
-      return { error: "Please choose a file" };
+      return { error: t.errorChooseFile };
     }
 
     for (const file of files.slice(0, 10)) {
@@ -129,7 +142,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "tagProduct") {
     const planHandle = await getCachedPlanHandle(session.shop);
     if (!canUseProductTagging(planHandle)) {
-      return { error: "Product tagging requires the Basic or Pro plan" };
+      return { error: t.errorProductPlanRequired };
     }
 
     const id = String(formData.get("id"));
@@ -214,7 +227,7 @@ function MediaGlyph({
 }
 
 export default function CustomMedia() {
-  const { media, canTagProducts } = useLoaderData<typeof loader>();
+  const { media, canTagProducts, t, tc, tProduct } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const uploadFetcher = useFetcher<typeof action>();
   const itemFetcher = useFetcher<typeof action>();
@@ -247,19 +260,21 @@ export default function CustomMedia() {
 
   useEffect(() => {
     if (fetcher.data?.added) {
-      shopify.toast.show("Media added");
+      shopify.toast.show(t.toastAdded);
       formRef.current?.reset();
     }
     if (fetcher.data?.error) {
       shopify.toast.show(fetcher.data.error, { isError: true });
     }
-  }, [fetcher.data, shopify]);
+  }, [fetcher.data, shopify, t.toastAdded]);
 
   useEffect(() => {
     if (uploadFetcher.data?.added) {
       const count = "count" in uploadFetcher.data ? uploadFetcher.data.count : 1;
       shopify.toast.show(
-        count && count > 1 ? `${count} files uploaded` : "Media uploaded",
+        count && count > 1
+          ? interpolate(t.toastFilesUploaded, { count })
+          : t.toastUploaded,
       );
       uploadFormRef.current?.reset();
       setSelectedFileName(null);
@@ -269,13 +284,13 @@ export default function CustomMedia() {
     if (uploadFetcher.data?.error) {
       shopify.toast.show(uploadFetcher.data.error, { isError: true });
     }
-  }, [uploadFetcher.data, shopify]);
+  }, [uploadFetcher.data, shopify, t.toastFilesUploaded, t.toastUploaded]);
 
   useEffect(() => {
     if (itemFetcher.data?.deleted) {
-      shopify.toast.show("Media removed");
+      shopify.toast.show(t.toastRemoved);
     }
-  }, [itemFetcher.data, shopify]);
+  }, [itemFetcher.data, shopify, t.toastRemoved]);
 
   useEffect(() => {
     if (itemFetcher.data?.updated && itemFetcher.state === "idle") {
@@ -359,13 +374,13 @@ export default function CustomMedia() {
   };
 
   return (
-    <s-page heading="Custom media" inlineSize="large">
+    <s-page heading={t.pageTitle} inlineSize="large">
       <style>{mediaStyles}</style>
       <div className={styles.workspace}>
         <header className={styles.pageHeader}>
           <div>
-            <h1>Your media, your way</h1>
-            <p>Add your own photos and videos to your storefront feed.</p>
+            <h1>{t.heroHeading}</h1>
+            <p>{t.heroSubtitle}</p>
           </div>
           <div className={styles.pageMark} aria-hidden="true">
             <MediaGlyph name="image" size={25} />
@@ -382,8 +397,8 @@ export default function CustomMedia() {
                 <MediaGlyph name="upload" />
               </div>
               <div>
-                <h2 id="upload-heading">Upload from your computer</h2>
-                <p>Photos or videos from your device.</p>
+                <h2 id="upload-heading">{t.uploadHeading}</h2>
+                <p>{t.uploadSubtitle}</p>
               </div>
             </div>
             <form
@@ -413,16 +428,16 @@ export default function CustomMedia() {
                       <img
                         className={styles.filePreview}
                         src={previewUrl}
-                        alt="Selected file preview"
+                        alt={t.selectedFilePreviewAlt}
                       />
                     )}
                     <span className={styles.fileName} aria-live="polite">
                       {selectedFileCount > 1
-                        ? `${selectedFileName} + ${selectedFileCount - 1} more`
+                        ? `${selectedFileName} ${interpolate(t.moreFilesSuffix, { count: selectedFileCount - 1 })}`
                         : selectedFileName}
                     </span>
                     <span className={styles.dropHint}>
-                      Click to choose different files
+                      {t.dropHintChangeFiles}
                     </span>
                   </>
                 ) : (
@@ -430,20 +445,20 @@ export default function CustomMedia() {
                     <span className={styles.uploadMark}>
                       <MediaGlyph name="upload" size={25} />
                     </span>
-                    <strong>Drop your photos or videos here</strong>
+                    <strong>{t.dropTitle}</strong>
                     <span className={styles.dropHint}>
-                      or <span className={styles.browseText}>browse files</span>{" "}
-                      — you can select{" "}
-                      <span className={styles.multiFileHint}>multiple at once</span>
+                      {t.dropHintBrowsePrefix}{" "}
+                      <span className={styles.browseText}>{t.browseFiles}</span>{" "}
+                      {t.dropHintBrowseSuffix}
                     </span>
                     <span className={styles.fileTypes}>
                       <span>
                         <MediaGlyph name="image" size={13} />
-                        Images
+                        {t.imagesLabel}
                       </span>
                       <span>
                         <MediaGlyph name="video" size={13} />
-                        Videos
+                        {t.videosLabel}
                       </span>
                     </span>
                   </>
@@ -454,7 +469,7 @@ export default function CustomMedia() {
                   name="file"
                   accept="image/*,video/*"
                   multiple
-                  aria-label="Choose image or video files"
+                  aria-label={t.chooseFileAria}
                   disabled={isUploading}
                   onChange={(event) => {
                     const files = Array.from(event.currentTarget.files ?? []);
@@ -475,8 +490,10 @@ export default function CustomMedia() {
                     <span className={styles.spinner} />
                     <strong>
                       {selectedFileCount > 1
-                        ? `Uploading ${selectedFileCount} files…`
-                        : "Uploading your media…"}
+                        ? interpolate(t.uploadingMultiple, {
+                            count: selectedFileCount,
+                          })
+                        : t.uploadingSingle}
                     </strong>
                   </span>
                 )}
@@ -489,7 +506,7 @@ export default function CustomMedia() {
                   aria-busy={isUploading}
                 >
                   <MediaGlyph name="upload" size={16} />
-                  {isUploading ? "Uploading…" : "Upload media"}
+                  {isUploading ? t.uploadButtonUploading : t.uploadButton}
                 </button>
               </div>
             </form>
@@ -504,8 +521,8 @@ export default function CustomMedia() {
                 <MediaGlyph name="link" />
               </div>
               <div>
-                <h2 id="link-heading">Add from a link</h2>
-                <p>Bring in media that's already online.</p>
+                <h2 id="link-heading">{t.linkHeading}</h2>
+                <p>{t.linkSubtitle}</p>
               </div>
             </div>
             <form
@@ -520,25 +537,25 @@ export default function CustomMedia() {
             >
               <div className={styles.urlFields}>
                 <s-select
-                  label="Type"
+                  label={t.typeLabel}
                   name="mediaType"
                   value="image"
                   icon="image"
                 >
-                  <s-option value="image">Image</s-option>
-                  <s-option value="video">Video</s-option>
+                  <s-option value="image">{t.imageOption}</s-option>
+                  <s-option value="video">{t.videoOption}</s-option>
                 </s-select>
                 <s-text-field
-                  label="Media URL"
+                  label={t.urlLabel}
                   name="url"
                   icon="link"
-                  placeholder="https://example.com/image.jpg"
-                  details="For video, use a direct video file link or a YouTube link."
+                  placeholder={t.urlPlaceholder}
+                  details={t.urlDetails}
                 ></s-text-field>
               </div>
               <div className={styles.linkNote}>
                 <MediaGlyph name="link" size={16} />
-                <span>Images, videos and YouTube links, all in one feed.</span>
+                <span>{t.linkNote}</span>
               </div>
               <div className={styles.formActions}>
                 <button
@@ -552,7 +569,7 @@ export default function CustomMedia() {
                   ) : (
                     <MediaGlyph name="plus" size={16} />
                   )}
-                  {isSubmitting ? "Adding media…" : "Add media"}
+                  {isSubmitting ? t.addButtonAdding : t.addButton}
                 </button>
               </div>
             </form>
@@ -563,15 +580,15 @@ export default function CustomMedia() {
           <div className={styles.galleryHeader}>
             <div>
               <div className={styles.galleryTitle}>
-                <h2 id="gallery-heading">Your custom media</h2>
+                <h2 id="gallery-heading">{t.galleryHeading}</h2>
                 <span className={styles.count}>{media.length}</span>
               </div>
-              <p>Your own content, ready for your gallery.</p>
+              <p>{t.gallerySubtitle}</p>
             </div>
             {media.length > 0 && (
               <span className={styles.reorderHint}>
                 <MediaGlyph name="grip" size={15} />
-                Drag to reorder
+                {t.reorderHint}
               </span>
             )}
           </div>
@@ -579,10 +596,10 @@ export default function CustomMedia() {
             <div className={styles.mediaGrid}>
               {orderedMedia.map((item) => {
                 const mediaLabel = item.youtubeThumbnailUrl
-                  ? "YouTube"
+                  ? t.youtubeLabel
                   : item.mediaType === "video"
-                    ? "Video"
-                    : "Image";
+                    ? t.videoLabel
+                    : t.imageLabel;
                 const mediaIcon = item.youtubeThumbnailUrl
                   ? "youtube"
                   : item.mediaType === "video"
@@ -617,9 +634,7 @@ export default function CustomMedia() {
                       ) : (
                         <img
                           src={item.youtubeThumbnailUrl ?? item.url}
-                          alt={
-                            item.caption || `Custom ${mediaLabel.toLowerCase()}`
-                          }
+                          alt={item.caption || mediaLabel}
                           loading="lazy"
                           draggable={false}
                         />
@@ -642,10 +657,10 @@ export default function CustomMedia() {
                       )}
                       <div className={styles.mediaBadges}>
                         {item.pinned && (
-                          <span className={styles.pinnedBadge}>Pinned</span>
+                          <span className={styles.pinnedBadge}>{t.pinnedBadge}</span>
                         )}
                         {item.hidden && (
-                          <span className={styles.hiddenBadge}>Hidden</span>
+                          <span className={styles.hiddenBadge}>{t.hiddenBadge}</span>
                         )}
                       </div>
                     </div>
@@ -655,7 +670,7 @@ export default function CustomMedia() {
                         <input
                           className={styles.captionInput}
                           value={editingCaption.caption}
-                          placeholder="Add a caption"
+                          placeholder={t.captionPlaceholder}
                           onChange={(event) =>
                             setEditingCaption({
                               id: item.id,
@@ -671,14 +686,14 @@ export default function CustomMedia() {
                               saveCaption(item.id, editingCaption.caption)
                             }
                           >
-                            Save
+                            {t.save}
                           </button>
                           <button
                             type="button"
                             className={styles.captionCancelButton}
                             onClick={() => setEditingCaption(null)}
                           >
-                            Cancel
+                            {t.cancel}
                           </button>
                         </div>
                       </div>
@@ -691,8 +706,8 @@ export default function CustomMedia() {
                           <button
                             type="button"
                             className={styles.captionEditButton}
-                            aria-label="Edit caption"
-                            title="Edit caption"
+                            aria-label={t.editCaptionAria}
+                            title={t.editCaptionAria}
                             disabled={isBusy}
                             onClick={() =>
                               setEditingCaption({
@@ -710,7 +725,7 @@ export default function CustomMedia() {
                     <div className={styles.mediaToolbar}>
                       <span
                         className={styles.dragHandle}
-                        title="Drag to reorder"
+                        title={t.reorderHint}
                       >
                         <MediaGlyph name="grip" size={17} />
                       </span>
@@ -722,8 +737,8 @@ export default function CustomMedia() {
                               ? styles.activeAction
                               : styles.iconButton
                           }
-                          aria-label={item.pinned ? "Unpin media" : "Pin media"}
-                          title={item.pinned ? "Unpin media" : "Pin media"}
+                          aria-label={item.pinned ? t.unpinMedia : t.pinMedia}
+                          title={item.pinned ? t.unpinMedia : t.pinMedia}
                           aria-pressed={item.pinned}
                           disabled={isBusy}
                           onClick={() => togglePin(item.id, item.pinned)}
@@ -742,9 +757,9 @@ export default function CustomMedia() {
                               : styles.iconButton
                           }
                           aria-label={
-                            item.hidden ? "Unhide media" : "Hide media"
+                            item.hidden ? t.unhideMedia : t.hideMedia
                           }
-                          title={item.hidden ? "Unhide media" : "Hide media"}
+                          title={item.hidden ? t.unhideMedia : t.hideMedia}
                           aria-pressed={item.hidden}
                           disabled={isBusy}
                           onClick={() => toggleHide(item.id, item.hidden)}
@@ -758,8 +773,8 @@ export default function CustomMedia() {
                           <button
                             type="button"
                             className={styles.iconButton}
-                            aria-label="Add caption"
-                            title="Add caption"
+                            aria-label={t.addCaptionAria}
+                            title={t.addCaptionAria}
                             disabled={isBusy}
                             onClick={() =>
                               setEditingCaption({ id: item.id, caption: "" })
@@ -776,7 +791,7 @@ export default function CustomMedia() {
                         onClick={() => deleteMedia(item.id)}
                       >
                         <MediaGlyph name="trash" size={14} />
-                        Remove
+                        {t.remove}
                       </button>
                     </div>
 
@@ -790,6 +805,7 @@ export default function CustomMedia() {
                         onTag={(product) => tagProduct(item.id, product)}
                         onUntag={untagProduct}
                         disabled={!canTagProducts}
+                        t={tProduct}
                       />
                     </div>
                   </div>
@@ -806,15 +822,13 @@ export default function CustomMedia() {
                   <MediaGlyph name="video" size={26} />
                 </span>
               </div>
-              <h3>Make your gallery your own</h3>
-              <p>
-                Upload a photo or video, or add a link above to get started.
-              </p>
+              <h3>{t.emptyHeading}</h3>
+              <p>{t.emptyDetails}</p>
             </div>
           )}
         </section>
       </div>
-      <PageFooter />
+      <PageFooter text={tc.footerRights} />
     </s-page>
   );
 }

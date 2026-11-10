@@ -304,13 +304,67 @@
     var sizeMap = { small: 80, medium: 140, large: 220, xlarge: 300 };
     var allPosts = [];
 
+    var STOREFRONT_I18N = {
+      en: {
+        adding: 'Adding...',
+        added: 'Added!',
+        error: 'Error',
+        shopNow: 'Shop now',
+        addToCart: 'Add to cart',
+        viewOriginal: 'View original',
+        noPosts: 'No Instagram posts yet.',
+        unableToLoad: 'Unable to load Instagram feed.',
+      },
+      de: {
+        adding: 'Wird hinzugefügt...',
+        added: 'Hinzugefügt!',
+        error: 'Fehler',
+        shopNow: 'Jetzt einkaufen',
+        addToCart: 'In den Warenkorb',
+        viewOriginal: 'Original ansehen',
+        noPosts: 'Noch keine Instagram-Beiträge.',
+        unableToLoad: 'Instagram-Feed konnte nicht geladen werden.',
+      },
+      es: {
+        adding: 'Agregando...',
+        added: '¡Agregado!',
+        error: 'Error',
+        shopNow: 'Comprar ahora',
+        addToCart: 'Agregar al carrito',
+        viewOriginal: 'Ver original',
+        noPosts: 'Aún no hay publicaciones de Instagram.',
+        unableToLoad: 'No se pudo cargar el feed de Instagram.',
+      },
+      fr: {
+        adding: 'Ajout...',
+        added: 'Ajouté !',
+        error: 'Erreur',
+        shopNow: 'Acheter',
+        addToCart: 'Ajouter au panier',
+        viewOriginal: 'Voir l\'original',
+        noPosts: 'Aucune publication Instagram pour le moment.',
+        unableToLoad: 'Impossible de charger le flux Instagram.',
+      },
+      it: {
+        adding: 'Aggiunta in corso...',
+        added: 'Aggiunto!',
+        error: 'Errore',
+        shopNow: 'Acquista ora',
+        addToCart: 'Aggiungi al carrello',
+        viewOriginal: 'Visualizza originale',
+        noPosts: 'Ancora nessun post di Instagram.',
+        unableToLoad: 'Impossibile caricare il feed di Instagram.',
+      },
+    };
+    var ti = STOREFRONT_I18N.en;
+
     function aspectRatioCss(value) {
       return (value || '3:4').replace(':', ' / ');
     }
 
     function addToCart(variantId, button) {
       var originalText = button.textContent;
-      button.textContent = 'Adding...';
+      button.textContent = ti.adding;
       button.disabled = true;
       fetch('/cart/add.js', {
         method: 'POST',
@@ -319,14 +373,14 @@
       })
         .then(function (res) {
           if (!res.ok) throw new Error('Add to cart failed');
-          button.textContent = 'Added!';
+          button.textContent = ti.added;
           setTimeout(function () {
             button.textContent = originalText;
             button.disabled = false;
           }, 1500);
         })
         .catch(function () {
-          button.textContent = 'Error';
+          button.textContent = ti.error;
           setTimeout(function () {
             button.textContent = originalText;
             button.disabled = false;
@@ -361,12 +415,12 @@
 
       var shopNow = document.createElement('a');
       shopNow.href = '/products/' + product.handle;
-      shopNow.textContent = 'Shop now';
+      shopNow.textContent = ti.shopNow;
       actions.appendChild(shopNow);
 
       var addBtn = document.createElement('button');
       addBtn.className = 'instafeed-add-to-cart';
-      addBtn.textContent = 'Add to cart';
+      addBtn.textContent = ti.addToCart;
       addBtn.onclick = function (event) {
         event.stopPropagation();
         addToCart(product.variantId, addBtn);
@@ -532,7 +586,7 @@
       link.href = post.permalink;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
-      link.textContent = 'View original';
+      link.textContent = ti.viewOriginal;
       content.appendChild(link);
 
       var close = document.createElement('button');
@@ -633,6 +687,7 @@
         var posts = data.posts || [];
         var feed = data.feed || {};
         allPosts = posts;
+        ti = STOREFRONT_I18N[data.locale] || STOREFRONT_I18N.en;
 
         root.innerHTML = '';
         root.style.setProperty('--instafeed-gap', (spacingMap[feed.postSpacing] ?? 8) + 'px');
@@ -647,7 +702,7 @@
         root.style.setProperty('--instafeed-radius', isCircle ? '9999px' : (feed.cornerRadius || 0) + 'px');
 
         if (posts.length === 0) {
-          root.innerHTML = '<p>No Instagram posts yet.</p>';
+          root.innerHTML = '<p>' + ti.noPosts + '</p>';
           return;
         }
 
@@ -690,7 +745,7 @@
         root.appendChild(container);
       })
       .catch(function () {
-        root.innerHTML = '<p>Unable to load Instagram feed.</p>';
+        root.innerHTML = '<p>' + ti.unableToLoad + '</p>';
       });
   })();
 </script>

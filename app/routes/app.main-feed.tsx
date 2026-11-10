@@ -29,19 +29,22 @@ import {
   removeProductTag,
   type ProductSearchResult,
 } from "../product-tags.server";
+import { resolveLocale, getDictionary } from "../i18n/resolve.server";
+import { interpolate } from "../i18n/format";
+import type { ProductTaggerDictionary } from "../components/ProductTagger";
 import PageFooter from "../components/PageFooter";
 import ProductTagger from "../components/ProductTagger";
 import styles from "../styles/main-feed.module.css";
 import feedStyles from "../styles/main-feed.module.css?inline";
 
-function relativeTime(iso: string) {
+function relativeTime(iso: string, locale: string) {
   const diffSeconds = (new Date(iso).getTime() - Date.now()) / 1000;
   const units: [Intl.RelativeTimeFormatUnit, number][] = [
     ["day", 86400],
     ["hour", 3600],
     ["minute", 60],
   ];
-  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
   for (const [unit, seconds] of units) {
     if (Math.abs(diffSeconds) >= seconds) {
       return rtf.format(Math.round(diffSeconds / seconds), unit);
@@ -81,8 +84,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     posts.map((post) => post.id),
   );
 
+  const locale = await resolveLocale(session.shop, request);
+  const t = getDictionary(locale, "mainFeed");
+  const tc = getDictionary(locale, "common");
+  const tProduct = getDictionary<ProductTaggerDictionary>(locale, "productTagger");
+
   return {
     shop: session.shop,
+    locale,
+    t,
+    tc,
+    tProduct,
     instagram: instagramAccount
       ? {
           connected: true as const,
@@ -107,6 +119,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   await requireActivePlanForLiveStore(admin, request);
   const formData = await request.formData();
   const intent = formData.get("intent");
+  const locale = await resolveLocale(session.shop, request);
+  const t = getDictionary(locale, "mainFeed");
 
   if (intent === "sync") {
     const syncedCount = await syncInstagramPosts(session.shop);
@@ -152,7 +166,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "tagProduct") {
     const planHandle = await getCachedPlanHandle(session.shop);
     if (!canUseProductTagging(planHandle)) {
-      return { type: "error" as const, error: "Product tagging requires the Basic or Pro plan" };
+      return { type: "error" as const, error: t.errorProductPlanRequired };
     }
 
     const postId = String(formData.get("id"));
@@ -201,7 +215,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Index() {
   const fetcher = useFetcher<typeof action>();
   const postFetcher = useFetcher<typeof action>();
-  const { shop, instagram, posts, feed, canTagProducts } =
+  const { shop, instagram, posts, feed, canTagProducts, locale, t, tc, tProduct } =
     useLoaderData<typeof loader>();
 
   const shopify = useAppBridge();
@@ -314,15 +328,17 @@ export default function Index() {
 
   useEffect(() => {
     if (fetcher.data?.type === "sync") {
-      shopify.toast.show(`Synced ${fetcher.data.syncedCount} posts`);
+      shopify.toast.show(
+        interpolate(t.toastSynced, { count: fetcher.data.syncedCount }),
+      );
     }
     if (fetcher.data?.type === "saveFeed") {
-      shopify.toast.show("Feed saved");
+      shopify.toast.show(t.toastFeedSaved);
     }
     if (fetcher.data?.type === "disconnect") {
-      shopify.toast.show("Instagram account disconnected");
+      shopify.toast.show(t.toastDisconnected);
     }
-  }, [fetcher.data, shopify]);
+  }, [fetcher.data, shopify, t.toastSynced, t.toastFeedSaved, t.toastDisconnected]);
 
   const syncPosts = () =>
     fetcher.submit({ intent: "sync" }, { method: "POST" });
@@ -346,13 +362,13 @@ export default function Index() {
   );
 
   return (
-    <s-page heading="Main feed" inlineSize="large">
+    <s-page heading={t.pageTitle} inlineSize="large">
       <style>{feedStyles}</style>
       <div className={styles.workspace}>
         <div className={styles.pageHeader}>
           <div>
-            <h1>Your Instagram feed</h1>
-            <p>Choose your layout. Style your posts. Make it yours.</p>
+            <h1>{t.heroHeading}</h1>
+            <p>{t.heroSubtitle}</p>
           </div>
           <button
             className={styles.saveButton}
@@ -376,13 +392,13 @@ export default function Index() {
                 <path d="m4 10 4 4 8-8" />
               </svg>
             )}
-            {isSaving ? "Saving…" : "Save feed"}
+            {isSaving ? t.saveButtonSaving : t.saveButton}
           </button>
         </div>
 
         <section
           className={styles.connection}
-          aria-label="Instagram connection"
+          aria-label={t.connectionAriaLabel}
         >
           <div className={styles.connectionInfo}>
             <div className={styles.instagramMark} aria-hidden="true">
@@ -410,7 +426,7 @@ export default function Index() {
                 <h2>
                   {instagram.connected
                     ? `@${instagram.username}`
-                    : "Connect your Instagram"}
+                    : t.connectTitle}
                 </h2>
                 <span
                   className={
@@ -418,17 +434,17 @@ export default function Index() {
                   }
                 >
                   <span aria-hidden="true" />
-                  {instagram.connected ? "Connected" : "Not connected"}
+                  {instagram.connected ? t.connectedBadge : t.disconnectedBadge}
                 </span>
               </div>
               <p>
                 {instagram.connected
-                  ? "Sync your latest posts and reels to keep your feed up to date."
-                  : "Connect a Business or Creator account to bring in your posts and reels."}
+                  ? t.connectedSubtitle
+                  : t.disconnectedSubtitle}
               </p>
               {instagram.connected && (
                 <p className={styles.connectionSyncedAt}>
-                  Synced {relativeTime(instagram.lastSyncedAt)}
+                  {t.syncedPrefix} {relativeTime(instagram.lastSyncedAt, locale)}
                 </p>
               )}
             </div>
@@ -442,17 +458,17 @@ export default function Index() {
                     target="_top"
                     icon="connect"
                   >
-                    Reconnect Instagram
+                    {t.reconnectButton}
                   </s-button>
                 ) : (
                   <s-button
                     onClick={syncPosts}
                     icon="refresh"
-                    accessibilityLabel="Sync Instagram posts"
+                    accessibilityLabel={t.syncButtonAria}
                     disabled={isSubmitting}
                     {...(isSyncing ? { loading: true } : {})}
                   >
-                    Sync posts
+                    {t.syncButton}
                   </s-button>
                 )}
                 <button
@@ -461,7 +477,7 @@ export default function Index() {
                   disabled={isSubmitting}
                   onClick={() => setConfirmingDisconnect(true)}
                 >
-                  Disconnect
+                  {t.disconnectLink}
                 </button>
               </div>
             ) : (
@@ -472,7 +488,7 @@ export default function Index() {
                   variant="primary"
                   icon="connect"
                 >
-                  Connect Instagram
+                  {t.connectButton}
                 </s-button>
               </div>
             )}
@@ -481,21 +497,15 @@ export default function Index() {
 
         {instagram.connected && instagram.needsReconnect && (
           <div className={`${styles.inlineBanner} ${styles.warningBanner}`}>
-            <strong>Reconnect needed</strong>
-            <span>
-              Your Instagram access has expired. Reconnect your account to
-              keep syncing new posts.
-            </span>
+            <strong>{t.reconnectBannerHeading}</strong>
+            <span>{t.reconnectBannerBody}</span>
           </div>
         )}
 
         {confirmingDisconnect && (
           <div className={`${styles.inlineBanner} ${styles.criticalBanner}`}>
-            <strong>Disconnect this Instagram account?</strong>
-            <span>
-              Synced posts will be removed, but your custom media stays
-              untouched. This can't be undone.
-            </span>
+            <strong>{t.disconnectConfirmHeading}</strong>
+            <span>{t.disconnectConfirmBody}</span>
             <div className={styles.bannerActions}>
               <button
                 type="button"
@@ -503,14 +513,14 @@ export default function Index() {
                 disabled={isDisconnecting}
                 onClick={disconnectInstagram}
               >
-                Yes, disconnect
+                {t.disconnectConfirmYes}
               </button>
               <button
                 type="button"
                 className={styles.bannerCancelButton}
                 onClick={() => setConfirmingDisconnect(false)}
               >
-                Cancel
+                {t.disconnectConfirmCancel}
               </button>
             </div>
           </div>
@@ -530,8 +540,8 @@ export default function Index() {
                 <s-icon type="settings" size="small" />
               </div>
               <div>
-                <h2>Feed settings</h2>
-                <p>A few details to make it your own.</p>
+                <h2>{t.feedSettingsHeading}</h2>
+                <p>{t.feedSettingsSubtitle}</p>
               </div>
             </div>
 
@@ -539,26 +549,26 @@ export default function Index() {
               className={styles.settingsSection}
               aria-labelledby="layout-heading"
             >
-              <h3 id="layout-heading">Layout &amp; display</h3>
+              <h3 id="layout-heading">{t.layoutSectionHeading}</h3>
               <div className={styles.fieldGrid}>
                 <s-select
-                  label="Posts to show"
+                  label={t.postsToShowLabel}
                   name="postsToShow"
                   value={feed.postsToShow}
                 >
-                  <s-option value="own_posts">Own posts</s-option>
-                  <s-option value="reels">Reels</s-option>
+                  <s-option value="own_posts">{t.ownPostsOption}</s-option>
+                  <s-option value="reels">{t.reelsOption}</s-option>
                 </s-select>
                 <s-text-field
-                  label="Feed title"
+                  label={t.feedTitleLabel}
                   name="title"
                   defaultValue={feed.title ?? ""}
-                  placeholder="e.g. Our Instagram"
+                  placeholder={t.feedTitlePlaceholder}
                 />
                 <fieldset
                   className={`${styles.layoutField} ${styles.fullWidth}`}
                 >
-                  <legend>Layout</legend>
+                  <legend>{t.layoutLegend}</legend>
                   <div className={styles.layoutOptions}>
                     {(["grid", "slider", "list"] as const).map((layout) => (
                       <label key={layout} className={styles.layoutOption}>
@@ -579,10 +589,10 @@ export default function Index() {
                           </span>
                           <span>
                             {layout === "grid"
-                              ? "Grid"
+                              ? t.gridOption
                               : layout === "slider"
-                                ? "Slider"
-                                : "List"}
+                                ? t.sliderOption
+                                : t.listOption}
                           </span>
                         </span>
                       </label>
@@ -590,24 +600,24 @@ export default function Index() {
                   </div>
                 </fieldset>
                 <s-select
-                  label="Post spacing"
+                  label={t.postSpacingLabel}
                   name="postSpacing"
                   value={feed.postSpacing}
                 >
-                  <s-option value="none">None</s-option>
-                  <s-option value="small">Small</s-option>
-                  <s-option value="medium">Medium</s-option>
-                  <s-option value="large">Large</s-option>
+                  <s-option value="none">{t.spacingNone}</s-option>
+                  <s-option value="small">{t.spacingSmall}</s-option>
+                  <s-option value="medium">{t.spacingMedium}</s-option>
+                  <s-option value="large">{t.spacingLarge}</s-option>
                 </s-select>
                 <s-select
-                  label="Post size"
+                  label={t.postSizeLabel}
                   name="postSize"
                   value={feed.postSize}
                 >
-                  <s-option value="small">Small</s-option>
-                  <s-option value="medium">Medium</s-option>
-                  <s-option value="large">Large</s-option>
-                  <s-option value="xlarge">Extra large</s-option>
+                  <s-option value="small">{t.sizeSmall}</s-option>
+                  <s-option value="medium">{t.sizeMedium}</s-option>
+                  <s-option value="large">{t.sizeLarge}</s-option>
+                  <s-option value="xlarge">{t.sizeXLarge}</s-option>
                 </s-select>
               </div>
             </section>
@@ -616,10 +626,10 @@ export default function Index() {
               className={styles.settingsSection}
               aria-labelledby="appearance-heading"
             >
-              <h3 id="appearance-heading">Appearance</h3>
+              <h3 id="appearance-heading">{t.appearanceSectionHeading}</h3>
               <div className={styles.fieldGrid}>
                 <s-select
-                  label="Format"
+                  label={t.formatLabel}
                   name="aspectRatio"
                   value={feed.aspectRatio}
                 >
@@ -631,18 +641,18 @@ export default function Index() {
                   <s-option value="1:3">1:3</s-option>
                   <s-option value="1:4">1:4</s-option>
                 </s-select>
-                <s-select label="Image fit" name="postFit" value={feed.postFit}>
-                  <s-option value="cover">Cover (crop to fill)</s-option>
-                  <s-option value="contain">Contain (show full image)</s-option>
+                <s-select label={t.imageFitLabel} name="postFit" value={feed.postFit}>
+                  <s-option value="cover">{t.fitCover}</s-option>
+                  <s-option value="contain">{t.fitContain}</s-option>
                 </s-select>
                 <s-select
-                  label="Shape"
+                  label={t.shapeLabel}
                   name="postShape"
                   value={postShape}
                   onChange={(event) => setPostShape(event.currentTarget.value)}
                 >
-                  <s-option value="rectangle">Rectangle</s-option>
-                  <s-option value="circle">Circle</s-option>
+                  <s-option value="rectangle">{t.shapeRectangle}</s-option>
+                  <s-option value="circle">{t.shapeCircle}</s-option>
                 </s-select>
                 <div>
                   {postShape === "circle" && (
@@ -653,7 +663,7 @@ export default function Index() {
                     />
                   )}
                   <s-number-field
-                    label="Corner radius (px)"
+                    label={t.cornerRadiusLabel}
                     name="cornerRadius"
                     value={cornerRadius}
                     onChange={(event) =>
@@ -671,21 +681,21 @@ export default function Index() {
               className={styles.settingsSection}
               aria-labelledby="dimensions-heading"
             >
-              <h3 id="dimensions-heading">Grid dimensions</h3>
+              <h3 id="dimensions-heading">{t.dimensionsSectionHeading}</h3>
               <div className={styles.dimensions}>
                 <div className={styles.dimensionGroup}>
                   <div className={styles.deviceLabel}>
                     <s-icon type="desktop" size="small" />
-                    <span>Desktop</span>
+                    <span>{t.desktopLabel}</span>
                   </div>
                   <div className={styles.fieldGrid}>
                     <s-number-field
-                      label="Rows"
+                      label={t.rowsLabel}
                       name="rowsDesktop"
                       defaultValue={String(feed.rowsDesktop)}
                     />
                     <s-number-field
-                      label="Columns"
+                      label={t.columnsLabel}
                       name="colsDesktop"
                       defaultValue={String(feed.colsDesktop)}
                     />
@@ -694,16 +704,16 @@ export default function Index() {
                 <div className={styles.dimensionGroup}>
                   <div className={styles.deviceLabel}>
                     <s-icon type="mobile" size="small" />
-                    <span>Mobile</span>
+                    <span>{t.mobileLabel}</span>
                   </div>
                   <div className={styles.fieldGrid}>
                     <s-number-field
-                      label="Rows"
+                      label={t.rowsLabel}
                       name="rowsMobile"
                       defaultValue={String(feed.rowsMobile)}
                     />
                     <s-number-field
-                      label="Columns"
+                      label={t.columnsLabel}
                       name="colsMobile"
                       defaultValue={String(feed.colsMobile)}
                     />
@@ -717,31 +727,39 @@ export default function Index() {
             <div className={styles.galleryHeader}>
               <div>
                 <div className={styles.galleryTitle}>
-                  <h2 id="posts-heading">Synced posts</h2>
+                  <h2 id="posts-heading">{t.postsHeading}</h2>
                   <span className={styles.count}>{posts.length}</span>
                 </div>
-                <p>Manage the posts in your Instagram feed.</p>
+                <p>{t.postsSubtitle}</p>
               </div>
               <span className={styles.gallerySource}>
                 <s-icon type="image" size="small" />
-                Instagram
+                {t.instagramSourceLabel}
               </span>
             </div>
             {posts.length > 0 ? (
               <>
                 <div className={styles.galleryHint}>
                   <s-icon type="drag-handle" size="small" />
-                  <span>
-                    Drag to reorder. Pin your favorites or hide a post.
-                  </span>
+                  <span>{t.galleryHint}</span>
                 </div>
 
                 <div className={styles.filterTabs}>
                   {(
                     [
-                      ["all", `All (${posts.length})`],
-                      ["shown", `Shown (${posts.filter((p) => !p.hidden).length})`],
-                      ["hidden", `Hidden (${posts.filter((p) => p.hidden).length})`],
+                      ["all", interpolate(t.filterAll, { count: posts.length })],
+                      [
+                        "shown",
+                        interpolate(t.filterShown, {
+                          count: posts.filter((p) => !p.hidden).length,
+                        }),
+                      ],
+                      [
+                        "hidden",
+                        interpolate(t.filterHidden, {
+                          count: posts.filter((p) => p.hidden).length,
+                        }),
+                      ],
                     ] as const
                   ).map(([value, label]) => (
                     <button
@@ -761,27 +779,29 @@ export default function Index() {
 
                 {selectedPostIds.size > 0 && (
                   <div className={styles.bulkBar}>
-                    <span>{selectedPostIds.size} selected</span>
+                    <span>
+                      {interpolate(t.selectedCount, { count: selectedPostIds.size })}
+                    </span>
                     <button
                       type="button"
                       className={styles.bulkButton}
                       onClick={() => applyBulkHide(false)}
                     >
-                      Show selected
+                      {t.showSelected}
                     </button>
                     <button
                       type="button"
                       className={styles.bulkButton}
                       onClick={() => applyBulkHide(true)}
                     >
-                      Hide selected
+                      {t.hideSelected}
                     </button>
                     <button
                       type="button"
                       className={styles.bulkButton}
                       onClick={() => setSelectedPostIds(new Set())}
                     >
-                      Clear selection
+                      {t.clearSelection}
                     </button>
                   </div>
                 )}
@@ -796,10 +816,10 @@ export default function Index() {
                           : "image";
                     const mediaLabel =
                       post.mediaType === "VIDEO"
-                        ? "Reel"
+                        ? t.reelLabel
                         : post.mediaType === "CAROUSEL_ALBUM"
-                          ? "Carousel"
-                          : "Photo";
+                          ? t.carouselLabel
+                          : t.photoLabel;
                     return (
                       <div
                         key={post.id}
@@ -818,14 +838,11 @@ export default function Index() {
                             className={styles.postCheckbox}
                             checked={selectedPostIds.has(post.id)}
                             onChange={() => togglePostSelected(post.id)}
-                            aria-label="Select post"
+                            aria-label={t.selectPostAria}
                           />
                           <img
                             src={post.thumbnailUrl ?? post.mediaUrl}
-                            alt={
-                              post.caption ||
-                              `Instagram ${mediaLabel.toLowerCase()} ${index + 1}`
-                            }
+                            alt={post.caption || `${mediaLabel} ${index + 1}`}
                             className={
                               post.hidden ? styles.hiddenImage : undefined
                             }
@@ -850,10 +867,10 @@ export default function Index() {
                           </span>
                           <div className={styles.postBadges}>
                             {post.pinned && (
-                              <span className={styles.pinnedBadge}>Pinned</span>
+                              <span className={styles.pinnedBadge}>{t.pinnedBadge}</span>
                             )}
                             {post.hidden && (
-                              <span className={styles.hiddenBadge}>Hidden</span>
+                              <span className={styles.hiddenBadge}>{t.hiddenBadge}</span>
                             )}
                           </div>
                         </div>
@@ -871,10 +888,10 @@ export default function Index() {
                                   : styles.postAction
                               }
                               aria-label={
-                                post.pinned ? "Unpin post" : "Pin post"
+                                post.pinned ? t.unpinPost : t.pinPost
                               }
                               aria-pressed={post.pinned}
-                              title={post.pinned ? "Unpin post" : "Pin post"}
+                              title={post.pinned ? t.unpinPost : t.pinPost}
                               disabled={postFetcher.state !== "idle"}
                               onClick={() =>
                                 togglePostPin(post.id, post.pinned)
@@ -893,10 +910,10 @@ export default function Index() {
                                   : styles.postAction
                               }
                               aria-label={
-                                post.hidden ? "Unhide post" : "Hide post"
+                                post.hidden ? t.unhidePost : t.hidePost
                               }
                               aria-pressed={post.hidden}
-                              title={post.hidden ? "Unhide post" : "Hide post"}
+                              title={post.hidden ? t.unhidePost : t.hidePost}
                               disabled={postFetcher.state !== "idle"}
                               onClick={() =>
                                 togglePostHide(post.id, post.hidden)
@@ -924,6 +941,7 @@ export default function Index() {
                             onTag={(product) => tagProduct(post.id, product)}
                             onUntag={untagProduct}
                             disabled={!canTagProducts}
+                            t={tProduct}
                           />
                         </div>
                       </div>
@@ -944,20 +962,20 @@ export default function Index() {
                 </div>
                 <h3>
                   {instagram.connected
-                    ? "Your feed starts here"
-                    : "Connect to start your feed"}
+                    ? t.emptyConnectedHeading
+                    : t.emptyDisconnectedHeading}
                 </h3>
                 <p>
                   {instagram.connected
-                    ? 'Click "Sync posts" above to bring in your latest Instagram posts and reels.'
-                    : "Connect your Instagram account above to start building your storefront feed."}
+                    ? t.emptyConnectedBody
+                    : t.emptyDisconnectedBody}
                 </p>
               </div>
             )}
           </section>
         </div>
       </div>
-      <PageFooter />
+      <PageFooter text={tc.footerRights} />
     </s-page>
   );
 }

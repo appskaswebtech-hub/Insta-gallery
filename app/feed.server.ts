@@ -34,6 +34,7 @@ export interface FeedDesignSettingsInput {
   showSliderPreviews: boolean;
   autoShowNewPosts: boolean;
   onPostClick: string;
+  language: string;
 }
 
 export function saveFeedDesignSettings(

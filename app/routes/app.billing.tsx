@@ -9,73 +9,46 @@ import {
   getCurrentSubscription,
 } from "../billing.server";
 import { setCachedPlanHandle } from "../plan-limits.server";
+import { resolveLocale, getDictionary, getPlanFeatures } from "../i18n/resolve.server";
+import { interpolate } from "../i18n/format";
 import PageFooter from "../components/PageFooter";
 import styles from "../styles/billing.module.css";
 import billingStyles from "../styles/billing.module.css?inline";
 
-const plans = [
-  {
-    name: "Free",
-    handle: "free",
-    price: "$0",
-    priceAmount: "0",
-    period: "forever",
-    description: "A simple way to get started with your Instagram gallery.",
-    features: [
-      "Up to 5 posts",
-      "Grid, slider, or list layout",
-      "Upload from your computer",
-      "Add media via URL",
-      "Sync your Instagram feed",
-      "Basic style customization",
-      "Community support",
-    ],
-  },
-  {
-    name: "Basic",
-    handle: "basic",
-    price: "$2.99",
-    priceAmount: "2.99",
-    period: "per month",
-    description: "More room to show your products and your latest content.",
-    features: [
-      "Up to 25 posts",
-      "All layout options",
-      "Upload from computer, URL, or YouTube",
-      "Full style customization",
-      "Sync your Instagram feed",
-      "Pin, hide, and reorder posts",
-      "Email support",
-    ],
-  },
-  {
-    name: "Pro",
-    handle: "pro",
-    price: "$4.99",
-    priceAmount: "4.99",
-    period: "per month",
-    description: "Show your full media library on your storefront.",
-    features: [
-      "Unlimited posts",
-      "All layout options",
-      "Upload from computer, URL, or YouTube",
-      "Full style customization",
-      "Sync your Instagram feed",
-      "Pin, hide, and reorder posts",
-      "Priority support",
-    ],
-  },
-];
+// Stable, English-only identifiers used for Shopify subscription names and
+// matching - never translated, since changing a subscription's name per
+// locale would break matching against subscriptions merchants already have.
+const PLAN_CONFIG = [
+  { handle: "free", legacyName: "Free", price: "$0", priceAmount: "0" },
+  { handle: "basic", legacyName: "Basic", price: "$2.99", priceAmount: "2.99" },
+  { handle: "pro", legacyName: "Pro", price: "$4.99", priceAmount: "4.99" },
+] as const;
 
-function planNameFromSubscriptionName(name: string) {
-  const match = plans.find((plan) => name.endsWith(plan.name));
-  return match?.name ?? "Free";
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function planHandleFromSubscriptionName(name: string) {
+  const match = PLAN_CONFIG.find((plan) => name.endsWith(plan.legacyName));
+  return match?.handle ?? "free";
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
   const requestUrl = new URL(request.url);
   const checkoutError = requestUrl.searchParams.get("checkout_error");
+  const locale = await resolveLocale(session.shop, request);
+  const t = getDictionary<Record<string, string>>(locale, "billing");
+  const tc = getDictionary(locale, "common");
+
+  const localizedPlans = PLAN_CONFIG.map((plan) => ({
+    handle: plan.handle,
+    price: plan.price,
+    name: t[`plan${capitalize(plan.handle)}Name`],
+    period: t[`plan${capitalize(plan.handle)}Period`],
+    description: t[`plan${capitalize(plan.handle)}Description`],
+    features: getPlanFeatures(locale, `plan${capitalize(plan.handle)}Features`),
+  }));
 
   let isDevelopmentStore = false;
   try {
@@ -96,49 +69,55 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   try {
     const subscription = await getCurrentSubscription(admin);
-    const activePlan = subscription
-      ? planNameFromSubscriptionName(subscription.name)
-      : "Free";
+    const activePlanHandle = subscription
+      ? planHandleFromSubscriptionName(subscription.name)
+      : "free";
 
     // Plan lookup is authoritative for this page. Keep a cache write failure
     // (for example, a stale Prisma Client or missing ShopPlan table) from
     // making a valid Shopify subscription look unverifiable to the merchant.
     try {
-      await setCachedPlanHandle(session.shop, activePlan.toLowerCase());
+      await setCachedPlanHandle(session.shop, activePlanHandle);
     } catch (cacheError) {
       console.error("Could not cache the resolved billing plan:", cacheError);
     }
 
     return {
-      activePlan,
+      activePlanHandle,
       currentPeriodEnd: subscription?.currentPeriodEnd ?? null,
       billingError: checkoutError,
       billingUpdated: requestUrl.searchParams.has("plan_handle"),
       isDevelopmentStore,
       requiresBilling: isDevelopmentStore === false && !subscription,
+      plans: localizedPlans,
+      t,
+      tc,
     };
   } catch (error) {
     console.error("Billing subscription lookup failed:", error);
     return {
-      activePlan: null,
+      activePlanHandle: null,
       currentPeriodEnd: null,
-      billingError:
-        checkoutError ??
-        (error instanceof Error ? error.message : "Could not verify your plan."),
+      billingError: checkoutError ?? (error instanceof Error ? error.message : t.verifyPlanError),
       billingUpdated: false,
       isDevelopmentStore,
       requiresBilling: isDevelopmentStore === false,
+      plans: localizedPlans,
+      t,
+      tc,
     };
   }
-}; 
+};
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session, redirect } = await authenticate.admin(request);
   const formData = await request.formData();
   const planHandle = String(formData.get("plan") ?? "");
-  const plan = plans.find((item) => item.handle === planHandle);
+  const plan = PLAN_CONFIG.find((item) => item.handle === planHandle);
+  const locale = await resolveLocale(session.shop, request);
+  const t = getDictionary<Record<string, string>>(locale, "billing");
 
-  if (!plan) return { error: "Unknown plan selected." };
+  if (!plan) return { error: t.unknownPlanError };
 
   try {
     if (plan.handle === "free") {
@@ -183,7 +162,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     returnUrl.searchParams.set("plan_handle", plan.handle);
 
     const confirmationUrl = await createAppSubscription(admin, {
-      name: `InstaGallery ${plan.name}`,
+      name: `InstaGallery ${plan.legacyName}`,
       price: plan.priceAmount,
       returnUrl: returnUrl.toString(),
       test: isDevelopmentStore,
@@ -194,16 +173,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (error instanceof Response) throw error;
     console.error("Could not start checkout for plan:", plan.handle, error);
     return {
-      error: error instanceof Error ? error.message : "Could not start checkout.",
+      error: error instanceof Error ? error.message : t.checkoutStartError,
     };
   }
 };
 
 export default function Billing() {
-  const { activePlan, currentPeriodEnd, billingError, billingUpdated } =
-    useLoaderData<typeof loader>();
+  const {
+    activePlanHandle,
+    currentPeriodEnd,
+    billingError,
+    billingUpdated,
+    plans,
+    t,
+    tc,
+  } = useLoaderData<typeof loader>();
   const shopify = useAppBridge();
   const fetcher = useFetcher<typeof action>();
+
+  const activePlan = plans.find((plan) => plan.handle === activePlanHandle);
 
   useEffect(() => {
     const confirmationUrl = fetcher.data && "confirmationUrl" in fetcher.data
@@ -223,28 +211,28 @@ export default function Billing() {
 
   useEffect(() => {
     if (billingUpdated && activePlan) {
-      shopify.toast.show(`Billing plan updated to ${activePlan}`);
+      shopify.toast.show(interpolate(t.toastPlanUpdated, { plan: activePlan.name }));
     }
-  }, [activePlan, billingUpdated, shopify]);
+  }, [activePlan, billingUpdated, shopify, t.toastPlanUpdated]);
 
   const periodEndLabel = currentPeriodEnd
     ? new Date(currentPeriodEnd).toLocaleDateString()
     : null;
 
   const planAccentClass: Record<string, string> = {
-    Free: styles.free,
-    Basic: styles.basic,
-    Pro: styles.pro,
+    free: styles.free,
+    basic: styles.basic,
+    pro: styles.pro,
   };
 
   return (
-    <s-page heading="Billing" inlineSize="large">
+    <s-page heading={t.pageTitle} inlineSize="large">
       <style>{billingStyles}</style>
       <div className={styles.workspace}>
         <header className={styles.pageHeader}>
           <div>
-            <h1>Billing &amp; plans</h1>
-            <p>Choose the plan that fits how much of your content you want to show.</p>
+            <h1>{t.heroHeading}</h1>
+            <p>{t.heroSubtitle}</p>
           </div>
           <div className={styles.pageMark} aria-hidden="true">
             <svg
@@ -281,7 +269,7 @@ export default function Billing() {
               </svg>
             </div>
             <div className={styles.noticeCopy}>
-              <h2>Could not verify your plan</h2>
+              <h2>{t.errorHeading}</h2>
               <p>{billingError}</p>
             </div>
           </div>
@@ -305,38 +293,45 @@ export default function Billing() {
               </div>
               <div>
                 <div className={styles.summaryTitle}>
-                  <span className={styles.summaryLabel}>Current plan</span>
-                  <h2>{activePlan}</h2>
-                  {activePlan !== "Free" && (
+                  <span className={styles.summaryLabel}>{t.currentPlanLabel}</span>
+                  <h2>{activePlan?.name}</h2>
+                  {activePlanHandle !== "free" && (
                     <span className={styles.activeBadge}>
                       <span aria-hidden="true" />
-                      Active
+                      {t.activeBadge}
                     </span>
                   )}
                 </div>
               </div>
             </div>
             <p className={styles.summaryDetails}>
-              {activePlan === "Free"
-                ? "Choose a plan to change how many posts can appear in your storefront gallery."
-                : `Your ${activePlan} plan is active${periodEndLabel ? ` until ${periodEndLabel}` : ""}.`}
+              {activePlanHandle === "free"
+                ? t.summaryFreePrompt
+                : periodEndLabel
+                  ? interpolate(t.summaryActiveWithDate, {
+                      plan: activePlan?.name ?? "",
+                      date: periodEndLabel,
+                    })
+                  : interpolate(t.summaryActiveNoDate, {
+                      plan: activePlan?.name ?? "",
+                    })}
             </p>
           </div>
         )}
 
         <div className={styles.sectionHeading}>
-          <h2>Available plans</h2>
-          <p>Switch anytime — changes apply as soon as you confirm.</p>
+          <h2>{t.availablePlansHeading}</h2>
+          <p>{t.availablePlansSubtitle}</p>
         </div>
 
         <div className={styles.planGrid}>
           {plans.map((plan) => {
-            const isCurrentPlan = activePlan === plan.name;
+            const isCurrentPlan = activePlanHandle === plan.handle;
             const isSubmitting = fetcher.state !== "idle";
             return (
               <div
-                key={plan.name}
-                className={`${styles.planCard} ${planAccentClass[plan.name] ?? ""} ${
+                key={plan.handle}
+                className={`${styles.planCard} ${planAccentClass[plan.handle] ?? ""} ${
                   isCurrentPlan ? styles.currentPlan : ""
                 }`}
               >
@@ -356,7 +351,7 @@ export default function Billing() {
                     </svg>
                   </div>
                   {isCurrentPlan && (
-                    <span className={styles.currentBadge}>Current plan</span>
+                    <span className={styles.currentBadge}>{t.currentPlanBadge}</span>
                   )}
                 </div>
                 <div className={styles.planName}>{plan.name}</div>
@@ -392,7 +387,7 @@ export default function Billing() {
                       className={`${styles.chooseButton} ${
                         isCurrentPlan
                           ? styles.currentButton
-                          : plan.name === "Pro"
+                          : plan.handle === "pro"
                             ? styles.primaryButton
                             : ""
                       }`}
@@ -402,7 +397,9 @@ export default function Billing() {
                       {isSubmitting && !isCurrentPlan && (
                         <span className={styles.spinner} aria-hidden="true" />
                       )}
-                      {isCurrentPlan ? "Current plan" : `Choose ${plan.name}`}
+                      {isCurrentPlan
+                        ? t.currentPlanButton
+                        : interpolate(t.chooseButton, { plan: plan.name })}
                     </button>
                   </fetcher.Form>
                 </div>
@@ -412,7 +409,7 @@ export default function Billing() {
         </div>
       </div>
 
-      <PageFooter />
+      <PageFooter text={tc.footerRights} />
     </s-page>
   );
 }
